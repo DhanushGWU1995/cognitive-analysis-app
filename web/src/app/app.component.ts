@@ -127,6 +127,11 @@ import { Component, computed, effect, signal } from '@angular/core';
               {{ feedback() === 'correct' ? 'Correct!' : 'Try again' }}
             </div>
           </div>
+
+          <div class="congrats" *ngIf="showCongrats()">
+            <video class="congrats-video" src="assets/video/congrats.mp4" autoplay muted playsinline></video>
+            <div class="congrats-text">Great job!</div>
+          </div>
         </section>
 
         <section class="card" *ngIf="screen() === 'results'">
@@ -166,6 +171,7 @@ export class AppComponent {
   readonly countdown = signal(0);
   readonly pressed = signal<number[]>([]);
   readonly feedback = signal<'correct' | 'wrong' | null>(null);
+  readonly showCongrats = signal(false);
 
   // A tiny built-in demo sequence plan (one line per trial)
   readonly locationSequences = signal<number[][]>([
@@ -197,6 +203,7 @@ export class AppComponent {
 
   private trialStartedAt = 0;
   private timer: number | null = null;
+  private congratsTimer: number | null = null;
 
   readonly currentSequence = computed(() => {
     const t = this.trialIndex();
@@ -256,6 +263,7 @@ export class AppComponent {
     this.countdown.set(this.studySeconds());
     this.pressed.set([]);
     this.feedback.set(null);
+    this.showCongrats.set(false);
     this.trialStartedAt = performance.now();
     this.screen.set('run');
     this._runStudyTick();
@@ -333,6 +341,7 @@ export class AppComponent {
       ]);
 
       this._play('success');
+      this._congratsBurst();
       window.setTimeout(() => this._nextTrialOrDone(), 900);
     } else {
       window.setTimeout(() => this.feedback.set(null), 450);
@@ -388,6 +397,12 @@ export class AppComponent {
       window.clearTimeout(this.timer);
       this.timer = null;
     }
+  }
+
+  private _congratsBurst() {
+    this.showCongrats.set(true);
+    if (this.congratsTimer != null) window.clearTimeout(this.congratsTimer);
+    this.congratsTimer = window.setTimeout(() => this.showCongrats.set(false), 3200);
   }
 
   private _play(name: 'correct' | 'wrong' | 'success') {

@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Redirecting…</title>
+    <meta http-equiv="refresh" content="0; url=./" />
+    <script>
+      // GitHub Pages SPA fallback:
+      // If a user refreshes on a client-side route, serve the app root.
+      (function () {
+        var l = window.location;
+        var base = l.pathname.split("/").slice(0, 2).join("/") + "/"; // "/<repo>/"
+        window.location.replace(base + l.search + l.hash);
+      })();
+    </script>
+  </head>
+  <body>
+    Redirecting…
+  </body>
+</html>
+

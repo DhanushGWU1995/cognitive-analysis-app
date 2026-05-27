@@ -186,6 +186,16 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
               {{ taskType() === TaskType.Location ? 'Touch each place in order!' : 'Touch each picture in order!' }}
             </div>
             <div class="subtitle" *ngIf="phase() === 'test'">Step {{ pressed().length + 1 }} of {{ currentSequence().length }}</div>
+            <div class="step-progress" *ngIf="phase() === 'test' && taskType() === TaskType.Location">
+              <div
+                class="step-badge"
+                *ngFor="let _ of [].constructor(currentSequence().length); let i = index"
+                [class.done]="i < pressed().length"
+              >
+                <span class="num">{{ i + 1 }}</span>
+                <span class="face" *ngIf="i < pressed().length">😊</span>
+              </div>
+            </div>
           </div>
 
           <div class="grid4" *ngIf="taskType() === TaskType.Location">
@@ -482,8 +492,6 @@ export class AppComponent {
     // Ignore repeats unless it is the next expected step (handles 13,13 sequences).
     if (presses.includes(choice) && choice !== expected) return;
 
-    const next = [...presses, choice];
-    this.pressed.set(next);
     const ok = choice === expected;
     this.feedback.set(ok ? 'correct' : 'wrong');
     this._play(ok ? 'correct' : 'wrong');
@@ -494,6 +502,8 @@ export class AppComponent {
       return;
     }
 
+    const next = [...presses, choice];
+    this.pressed.set(next);
     if (next.length >= this.currentSequence().length) {
       const ms = Math.max(0, Math.round(performance.now() - this.trialStartedAt));
       const correct = next.join(',') === this.currentSequence().join(',');

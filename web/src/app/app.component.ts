@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, effect, signal } from '@angular/core';
+import { Component, computed, effect, signal, untracked } from '@angular/core';
 
 @Component({
   selector: 'app-root',
@@ -283,9 +283,11 @@ export class AppComponent {
       const steps = Math.max(1, Math.min(5, this.stepsNum()));
       const task = this.taskType();
       if (task === this.TaskType.Picture) {
-        this.pictureSequences.set(this._normalizeSequences(this.pictureSequences(), t, steps, 1, 99));
+        const cur = untracked(() => this.pictureSequences());
+        this.pictureSequences.set(this._normalizeSequences(cur, t, steps, 1, 99));
       } else {
-        this.locationSequences.set(this._normalizeSequences(this.locationSequences(), t, steps, 1, 16));
+        const cur = untracked(() => this.locationSequences());
+        this.locationSequences.set(this._normalizeSequences(cur, t, steps, 1, 16));
       }
     });
   }

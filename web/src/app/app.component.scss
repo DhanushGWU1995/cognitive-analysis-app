@@ -361,6 +361,25 @@ input {
   filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.25));
 }
 
+/* Picture test cards: slightly smaller overlay so it fits the tile */
+.choice .choice-step {
+  width: 72px;
+  height: 72px;
+  border-radius: 22px;
+  font-size: 34px;
+}
+
+.choice .choice-step .s {
+  bottom: 12px;
+  right: 12px;
+  font-size: 32px;
+}
+
+.choice {
+  position: relative;
+  overflow: hidden;
+}
+
 .choices {
   display: grid;
   place-items: center;

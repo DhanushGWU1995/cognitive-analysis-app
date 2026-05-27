@@ -186,7 +186,7 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
               {{ taskType() === TaskType.Location ? 'Touch each place in order!' : 'Touch each picture in order!' }}
             </div>
             <div class="subtitle" *ngIf="phase() === 'test'">Step {{ pressed().length + 1 }} of {{ currentSequence().length }}</div>
-            <div class="step-progress" *ngIf="phase() === 'test' && taskType() === TaskType.Location">
+            <div class="step-progress" *ngIf="phase() === 'test'">
               <div
                 class="step-badge"
                 *ngFor="let _ of [].constructor(currentSequence().length); let i = index"
@@ -242,8 +242,17 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
             </button>
 
             <div class="choice-grid" *ngIf="phase() === 'test'">
-              <button class="choice" *ngFor="let p of testChoices()" (click)="onPick(p)" [class.pressed]="isChoiceSelected(p)">
-                <img class="pic" [src]="'assets/pics/' + pad3(p) + '.jpg'" alt="" />
+              <button
+                class="choice"
+                *ngFor="let p of testChoices()"
+                (click)="onPick(p)"
+                [class.pressed]="isChoiceSelected(p)"
+              >
+                <div class="choice-step" *ngIf="pressedBadgesPic()[p] as n">
+                  <span class="n">{{ n }}</span>
+                  <span class="s">😊</span>
+                </div>
+                <img class="pic" [src]="'assets/pics/' + pad3(p) + '.jpg'" alt="" loading="lazy" />
               </button>
             </div>
           </div>
@@ -380,7 +389,14 @@ export class AppComponent {
   });
 
   readonly pressedBadges = computed(() => {
-    // For location task: map cell -> last completed step number (handles repeats by showing latest)
+    // Location task: map cell -> last completed step number (handles repeats by showing latest)
+    const map: Record<number, number> = {};
+    for (const p of this.pressedOrder()) map[p.cell] = p.step;
+    return map;
+  });
+
+  /** Picture task: map picture id -> last completed step (same pressedOrder, cell holds pic id). */
+  readonly pressedBadgesPic = computed(() => {
     const map: Record<number, number> = {};
     for (const p of this.pressedOrder()) map[p.cell] = p.step;
     return map;

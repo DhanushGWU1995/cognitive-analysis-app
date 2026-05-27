@@ -81,14 +81,35 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
               <div class="seq-row" *ngFor="let _ of [].constructor(trials()); let ti = index">
                 <div class="cell trial">{{ ti + 1 }}</div>
                 <div class="cell" *ngFor="let __ of [].constructor(stepsNum()); let si = index">
-                  <select
-                    class="pick"
-                    [value]="pictureSequences()[ti]?.[si] ?? 1"
-                    (change)="setPictureStep(ti, si, $any($event.target).value)"
-                  >
-                    <option *ngFor="let pid of picIds" [value]="pid">{{ pad3(pid) }}</option>
-                  </select>
+                  <button class="pick pick-visual" type="button" (click)="openPicPicker(ti, si)">
+                    <img class="pick-thumb" [src]="'assets/pics/' + pad3(pictureSequences()[ti][si]) + '.jpg'" alt="" loading="lazy" />
+                    <span class="pick-label">{{ pad3(pictureSequences()[ti][si]) }}</span>
+                  </button>
                 </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Visual picture picker overlay -->
+          <div class="picker-overlay" *ngIf="picPickerOpen()" (click)="closePicPicker()">
+            <div class="picker" (click)="$event.stopPropagation()">
+              <div class="picker-top">
+                <div class="picker-title">
+                  Pick picture — Trial {{ picPickerTrial() + 1 }}, Step {{ picPickerStep() + 1 }}
+                </div>
+                <button class="btn ghost" type="button" (click)="closePicPicker()">Close</button>
+              </div>
+              <div class="picker-grid">
+                <button
+                  class="picker-item"
+                  *ngFor="let pid of picIds"
+                  type="button"
+                  [disabled]="isPicDisabledInTrial(picPickerTrial(), picPickerStep(), pid)"
+                  (click)="pickPic(pid)"
+                >
+                  <img class="picker-img" [src]="'assets/pics/' + pad3(pid) + '.jpg'" alt="" loading="lazy" />
+                  <div class="picker-id">{{ pad3(pid) }}</div>
+                </button>
               </div>
             </div>
           </div>
@@ -232,6 +253,12 @@ export class AppComponent {
   private trialStartedAt = 0;
   private timer: number | null = null;
   private congratsTimer: number | null = null;
+  private activeAudio: HTMLAudioElement[] = [];
+
+  // Picture picker overlay (visual selection)
+  readonly picPickerOpen = signal(false);
+  readonly picPickerTrial = signal(0);
+  readonly picPickerStep = signal(0);
 
   readonly currentSequence = computed(() => {
     const t = this.trialIndex();
@@ -273,7 +300,11 @@ export class AppComponent {
     // Ensure no timers leak between screens
     effect(() => {
       const s = this.screen();
-      if (s !== 'run') this._stopTimer();
+      if (s !== 'run') {
+        this._stopTimer();
+        this._stopAllAudio();
+        this.picPickerOpen.set(false);
+      }
     });
 
     // Keep per-trial sequence arrays in sync with Trials + StepsNum.
@@ -394,6 +425,7 @@ export class AppComponent {
   private _nextTrialOrDone() {
     const t = this.trialIndex() + 1;
     if (t >= this.trials()) {
+      this._stopAllAudio();
       this.phase.set('done');
       this.screen.set('results');
       return;
@@ -454,9 +486,26 @@ export class AppComponent {
       wrong: 'assets/sfx/whoosh1.wav',
       success: 'assets/sfx/applause.mp3',
     };
+    this._stopAllAudio();
     const audio = new Audio(map[name]);
-    audio.volume = 0.9;
+    audio.volume = name === 'success' ? 0.75 : 0.9;
+    audio.currentTime = 0;
+    this.activeAudio = [audio];
     void audio.play().catch(() => {});
+    if (name === 'success') {
+      // Cap applause length so it doesn't linger after completion
+      window.setTimeout(() => this._stopAllAudio(), 2200);
+    }
+  }
+
+  private _stopAllAudio() {
+    for (const a of this.activeAudio) {
+      try {
+        a.pause();
+        a.currentTime = 0;
+      } catch {}
+    }
+    this.activeAudio = [];
   }
 
   // UI helpers
@@ -486,6 +535,31 @@ export class AppComponent {
     if (!next[trialIdx]) return;
     next[trialIdx][stepIdx] = pic;
     this.pictureSequences.set(next);
+  }
+
+  openPicPicker(trialIdx: number, stepIdx: number) {
+    this.picPickerTrial.set(trialIdx);
+    this.picPickerStep.set(stepIdx);
+    this.picPickerOpen.set(true);
+  }
+
+  closePicPicker() {
+    this.picPickerOpen.set(false);
+  }
+
+  pickPic(pid: number) {
+    const ti = this.picPickerTrial();
+    const si = this.picPickerStep();
+    this.setPictureStep(ti, si, String(pid));
+    this.picPickerOpen.set(false);
+  }
+
+  isPicDisabledInTrial(trialIdx: number, stepIdx: number, pid: number) {
+    const row = this.pictureSequences()[trialIdx] ?? [];
+    for (let i = 0; i < row.length; i++) {
+      if (i !== stepIdx && row[i] === pid) return true;
+    }
+    return false;
   }
 
   setLocationStep(trialIdx: number, stepIdx: number, value: string) {

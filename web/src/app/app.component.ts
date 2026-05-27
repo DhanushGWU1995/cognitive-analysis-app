@@ -209,8 +209,10 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
               (click)="onPick(cell)"
             >
               <div class="step-overlay" *ngIf="phase() === 'test' && pressedBadges()[cell] as n">
-                <span class="step-num">{{ n }}</span>
-                <span class="step-face">😊</span>
+                <div class="step-overlay-cluster" aria-hidden="true">
+                  <span class="step-face">😊</span>
+                  <span class="step-num">{{ n }}</span>
+                </div>
               </div>
               <!-- Study: show ONLY the active cell picture (clearer). Test: show only choice cells. -->
               <ng-container *ngIf="(phase() === 'study' && isLocationCellActive(cell)) || (phase() === 'test' && testChoices().includes(cell)); else emptyCell">
@@ -249,8 +251,10 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
                 [class.pressed]="isChoiceSelected(p)"
               >
                 <div class="step-overlay" *ngIf="pressedBadgesPic()[p] as n">
-                  <span class="step-num">{{ n }}</span>
-                  <span class="step-face">😊</span>
+                  <div class="step-overlay-cluster" aria-hidden="true">
+                    <span class="step-face">😊</span>
+                    <span class="step-num">{{ n }}</span>
+                  </div>
                 </div>
                 <img class="pic" [src]="'assets/pics/' + pad3(p) + '.jpg'" alt="" loading="lazy" />
               </button>

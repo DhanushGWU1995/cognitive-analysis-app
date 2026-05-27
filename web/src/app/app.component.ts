@@ -68,6 +68,31 @@ import { Component, computed, effect, signal } from '@angular/core';
             </label>
           </div>
 
+          <div class="seq-editor" *ngIf="taskType() === TaskType.Picture">
+            <h2>Picture sequence (one row per trial)</h2>
+            <p class="muted small">Pick a picture for each step. StepsNum controls how many dropdowns appear per trial.</p>
+
+            <div class="seq-table">
+              <div class="seq-row header">
+                <div class="cell h">Trial</div>
+                <div class="cell h" *ngFor="let _ of [].constructor(stepsNum()); let si = index">Step {{ si + 1 }}</div>
+              </div>
+
+              <div class="seq-row" *ngFor="let _ of [].constructor(trials()); let ti = index">
+                <div class="cell trial">{{ ti + 1 }}</div>
+                <div class="cell" *ngFor="let __ of [].constructor(stepsNum()); let si = index">
+                  <select
+                    class="pick"
+                    [value]="pictureSequences()[ti]?.[si] ?? 1"
+                    (change)="setPictureStep(ti, si, $any($event.target).value)"
+                  >
+                    <option *ngFor="let pid of picIds" [value]="pid">{{ pad3(pid) }}</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div class="actions">
             <button class="btn ghost" (click)="screen.set('home')">Back</button>
             <button class="btn primary" [disabled]="!canStart()" (click)="start()">Start</button>
@@ -190,6 +215,9 @@ export class AppComponent {
     [3, 15],
   ]);
 
+  // Assets: pics are 001.jpg..099.jpg
+  readonly picIds = Array.from({ length: 99 }, (_v, i) => i + 1);
+
   readonly results = signal<
     Array<{
       trial: number;
@@ -246,6 +274,19 @@ export class AppComponent {
     effect(() => {
       const s = this.screen();
       if (s !== 'run') this._stopTimer();
+    });
+
+    // Keep per-trial sequence arrays in sync with Trials + StepsNum.
+    effect(() => {
+      // reading signals establishes deps
+      const t = Math.max(1, Math.min(50, this.trials()));
+      const steps = Math.max(1, Math.min(5, this.stepsNum()));
+      const task = this.taskType();
+      if (task === this.TaskType.Picture) {
+        this.pictureSequences.set(this._normalizeSequences(this.pictureSequences(), t, steps, 1, 99));
+      } else {
+        this.locationSequences.set(this._normalizeSequences(this.locationSequences(), t, steps, 1, 16));
+      }
     });
   }
 
@@ -433,5 +474,50 @@ export class AppComponent {
   pad3(n: number) {
     const x = Math.max(0, Math.floor(n));
     return x.toString().padStart(3, '0');
+  }
+
+  setPictureStep(trialIdx: number, stepIdx: number, value: string) {
+    const pic = Math.max(1, Math.min(99, Number(value) || 1));
+    const t = Math.max(1, this.trials());
+    const steps = Math.max(1, this.stepsNum());
+    const next = this._normalizeSequences(this.pictureSequences(), t, steps, 1, 99).map((row) => [...row]);
+    if (!next[trialIdx]) return;
+    next[trialIdx][stepIdx] = pic;
+    this.pictureSequences.set(next);
+  }
+
+  setLocationStep(trialIdx: number, stepIdx: number, value: string) {
+    const cell = Math.max(1, Math.min(16, Number(value) || 1));
+    const t = Math.max(1, this.trials());
+    const steps = Math.max(1, this.stepsNum());
+    const next = this._normalizeSequences(this.locationSequences(), t, steps, 1, 16).map((row) => [...row]);
+    if (!next[trialIdx]) return;
+    next[trialIdx][stepIdx] = cell;
+    this.locationSequences.set(next);
+  }
+
+  private _normalizeSequences(
+    seqs: number[][],
+    trials: number,
+    steps: number,
+    minVal: number,
+    maxVal: number,
+  ) {
+    const safeVal = (x: number | undefined, fallback: number) => {
+      const n = Number(x);
+      if (!Number.isFinite(n)) return fallback;
+      return Math.max(minVal, Math.min(maxVal, Math.floor(n)));
+    };
+    const out: number[][] = [];
+    for (let i = 0; i < trials; i++) {
+      const prev = seqs[i] ?? seqs[seqs.length - 1] ?? [];
+      const row: number[] = [];
+      for (let s = 0; s < steps; s++) {
+        const fb = safeVal(prev[s], minVal);
+        row.push(fb);
+      }
+      out.push(row);
+    }
+    return out;
   }
 }

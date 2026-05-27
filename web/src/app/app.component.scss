@@ -457,6 +457,49 @@ input {
   cursor: pointer;
 }
 
+.pick-loc {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.loc-pill {
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  font-weight: 1000;
+  color: #0f172a;
+  background: rgba(255, 215, 0, 0.25);
+  border: 1px solid rgba(15, 23, 42, 0.12);
+}
+
+.loc-grid {
+  padding: 14px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.loc-cell {
+  height: 64px;
+  border-radius: 16px;
+  border: 1px solid rgba(15, 23, 42, 0.14);
+  background: rgba(255, 255, 255, 0.95);
+  font-weight: 1000;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.loc-cell:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+}
+
 .pick-thumb {
   width: 28px;
   height: 28px;

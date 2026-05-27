@@ -114,6 +114,51 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
             </div>
           </div>
 
+          <div class="seq-editor" *ngIf="taskType() === TaskType.Location">
+            <h2>Location sequence (one row per trial)</h2>
+            <p class="muted small">Pick a grid cell (1–16) for each step. StepsNum controls how many picks per trial.</p>
+
+            <div class="seq-table">
+              <div class="seq-row header">
+                <div class="cell h">Trial</div>
+                <div class="cell h" *ngFor="let _ of [].constructor(stepsNum()); let si = index">Step {{ si + 1 }}</div>
+              </div>
+
+              <div class="seq-row" *ngFor="let _ of [].constructor(trials()); let ti = index">
+                <div class="cell trial">{{ ti + 1 }}</div>
+                <div class="cell" *ngFor="let __ of [].constructor(stepsNum()); let si = index">
+                  <button class="pick pick-loc" type="button" (click)="openLocPicker(ti, si)">
+                    <span class="loc-pill">{{ locationSequences()[ti][si] }}</span>
+                    <span class="pick-label">Cell</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Location picker overlay -->
+          <div class="picker-overlay" *ngIf="locPickerOpen()" (click)="closeLocPicker()">
+            <div class="picker" (click)="$event.stopPropagation()">
+              <div class="picker-top">
+                <div class="picker-title">
+                  Pick location — Trial {{ locPickerTrial() + 1 }}, Step {{ locPickerStep() + 1 }}
+                </div>
+                <button class="btn ghost" type="button" (click)="closeLocPicker()">Close</button>
+              </div>
+              <div class="loc-grid">
+                <button
+                  class="loc-cell"
+                  *ngFor="let cell of [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]"
+                  type="button"
+                  [disabled]="isLocDisabledInTrial(locPickerTrial(), locPickerStep(), cell)"
+                  (click)="pickLoc(cell)"
+                >
+                  {{ cell }}
+                </button>
+              </div>
+            </div>
+          </div>
+
           <div class="actions">
             <button class="btn ghost" (click)="screen.set('home')">Back</button>
             <button class="btn primary" [disabled]="!canStart()" (click)="start()">Start</button>
@@ -259,6 +304,10 @@ export class AppComponent {
   readonly picPickerOpen = signal(false);
   readonly picPickerTrial = signal(0);
   readonly picPickerStep = signal(0);
+  // Location picker overlay (4x4 grid selection)
+  readonly locPickerOpen = signal(false);
+  readonly locPickerTrial = signal(0);
+  readonly locPickerStep = signal(0);
 
   readonly currentSequence = computed(() => {
     const t = this.trialIndex();
@@ -304,6 +353,7 @@ export class AppComponent {
         this._stopTimer();
         this._stopAllAudio();
         this.picPickerOpen.set(false);
+        this.locPickerOpen.set(false);
       }
     });
 
@@ -558,6 +608,31 @@ export class AppComponent {
     const row = this.pictureSequences()[trialIdx] ?? [];
     for (let i = 0; i < row.length; i++) {
       if (i !== stepIdx && row[i] === pid) return true;
+    }
+    return false;
+  }
+
+  openLocPicker(trialIdx: number, stepIdx: number) {
+    this.locPickerTrial.set(trialIdx);
+    this.locPickerStep.set(stepIdx);
+    this.locPickerOpen.set(true);
+  }
+
+  closeLocPicker() {
+    this.locPickerOpen.set(false);
+  }
+
+  pickLoc(cell: number) {
+    const ti = this.locPickerTrial();
+    const si = this.locPickerStep();
+    this.setLocationStep(ti, si, String(cell));
+    this.locPickerOpen.set(false);
+  }
+
+  isLocDisabledInTrial(trialIdx: number, stepIdx: number, cell: number) {
+    const row = this.locationSequences()[trialIdx] ?? [];
+    for (let i = 0; i < row.length; i++) {
+      if (i !== stepIdx && row[i] === cell) return true;
     }
     return false;
   }

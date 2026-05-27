@@ -5,6 +5,7 @@ on:
     branches: ["main"]
   workflow_dispatch:
 
+# Default permissions (can be overridden per job)
 permissions:
   contents: read
   pages: write
@@ -17,8 +18,15 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     steps:
       - uses: actions/checkout@v4
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
 
       - uses: actions/setup-node@v4
         with:
@@ -32,7 +40,7 @@ jobs:
 
       - name: Build
         working-directory: web
-        run: npm run build -- --base-href "/cognitive-analysis-app/"
+        run: npm run build -- --base-href "/${{ github.event.repository.name }}/"
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
@@ -45,6 +53,9 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     needs: build
+    permissions:
+      pages: write
+      id-token: write
     steps:
       - name: Deploy to GitHub Pages
         id: deployment

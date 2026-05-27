@@ -186,7 +186,7 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
               {{ taskType() === TaskType.Location ? 'Touch each place in order!' : 'Touch each picture in order!' }}
             </div>
             <div class="subtitle" *ngIf="phase() === 'test'">Step {{ pressed().length + 1 }} of {{ currentSequence().length }}</div>
-            <div class="step-progress" *ngIf="phase() === 'test'">
+            <div class="step-progress" *ngIf="phase() === 'test' && !showCongrats()">
               <div
                 class="step-badge"
                 *ngFor="let _ of [].constructor(currentSequence().length); let i = index"
@@ -208,7 +208,7 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
               [disabled]="phase() === 'test' ? !testChoices().includes(cell) : true"
               (click)="onPick(cell)"
             >
-              <div class="step-overlay" *ngIf="phase() === 'test' && pressedBadges()[cell] as n">
+              <div class="step-overlay" *ngIf="phase() === 'test' && !showCongrats() && pressedBadges()[cell] as n">
                 <div class="step-overlay-cluster" aria-hidden="true">
                   <span class="step-num">{{ n }}</span>
                   <span class="step-face">😊</span>
@@ -250,7 +250,7 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
                 (click)="onPick(p)"
                 [class.pressed]="isChoiceSelected(p)"
               >
-                <div class="step-overlay" *ngIf="pressedBadgesPic()[p] as n">
+                <div class="step-overlay" *ngIf="!showCongrats() && pressedBadgesPic()[p] as n">
                   <div class="step-overlay-cluster" aria-hidden="true">
                     <span class="step-num">{{ n }}</span>
                     <span class="step-face">😊</span>
@@ -267,9 +267,24 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
             </div>
           </div>
 
-          <div class="congrats" *ngIf="showCongrats()">
-            <video class="congrats-video" src="assets/video/congrats.mp4" autoplay muted playsinline></video>
-            <div class="congrats-text">Great job!</div>
+          <div class="congrats" *ngIf="showCongrats()" role="dialog" aria-live="polite" aria-label="Congratulations">
+            <div class="congrats-backdrop"></div>
+            <div class="congrats-card">
+              <div class="congrats-orbit" aria-hidden="true">
+                <span class="orbit-item o1">✨</span>
+                <span class="orbit-item o2">⭐</span>
+                <span class="orbit-item o3">🎊</span>
+                <span class="orbit-item o4">🌟</span>
+                <span class="orbit-item o5">✨</span>
+                <span class="orbit-item o6">🎉</span>
+              </div>
+              <div class="congrats-hero">🎉</div>
+              <div class="congrats-video-wrap">
+                <video class="congrats-video" src="assets/video/congrats.mp4" autoplay muted playsinline></video>
+              </div>
+              <h2 class="congrats-title">You did it!</h2>
+              <p class="congrats-sub">Great job — keep going!</p>
+            </div>
           </div>
         </section>
 

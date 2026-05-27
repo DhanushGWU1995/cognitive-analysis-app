@@ -208,6 +208,10 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
               [disabled]="phase() === 'test' ? !testChoices().includes(cell) : true"
               (click)="onPick(cell)"
             >
+              <div class="cell-step" *ngIf="phase() === 'test' && pressedBadges()[cell] as n">
+                <span class="n">{{ n }}</span>
+                <span class="s">😊</span>
+              </div>
               <!-- Study: show ONLY the active cell picture (clearer). Test: show only choice cells. -->
               <ng-container *ngIf="(phase() === 'study' && isLocationCellActive(cell)) || (phase() === 'test' && testChoices().includes(cell)); else emptyCell">
                 <img
@@ -292,6 +296,7 @@ export class AppComponent {
   readonly stepIndex = signal(0); // within-trial sequence step
   readonly countdown = signal(0);
   readonly pressed = signal<number[]>([]);
+  readonly pressedOrder = signal<Array<{ cell: number; step: number }>>([]);
   readonly feedback = signal<'correct' | 'wrong' | null>(null);
   readonly showCongrats = signal(false);
   // Location task: pictures are just visual tokens (identity irrelevant)
@@ -374,6 +379,13 @@ export class AppComponent {
     return seq[k];
   });
 
+  readonly pressedBadges = computed(() => {
+    // For location task: map cell -> last completed step number (handles repeats by showing latest)
+    const map: Record<number, number> = {};
+    for (const p of this.pressedOrder()) map[p.cell] = p.step;
+    return map;
+  });
+
   readonly canStart = computed(() => {
     const okId = this.subjectId().trim().length >= 2;
     return okId && this.trials() >= 1 && this.stepsNum() >= 1 && this.studySeconds() >= 1;
@@ -420,6 +432,7 @@ export class AppComponent {
     this.stepIndex.set(0);
     this.countdown.set(this.studySeconds());
     this.pressed.set([]);
+    this.pressedOrder.set([]);
     this.feedback.set(null);
     this.showCongrats.set(false);
     this.locTestPics.set({});
@@ -463,6 +476,7 @@ export class AppComponent {
     this.phase.set('test');
     this.stepIndex.set(0);
     this.pressed.set([]);
+    this.pressedOrder.set([]);
     this.feedback.set(null);
     if (this.taskType() === this.TaskType.Location) {
       // Assign random pictures to each visible location cell for this trial's test phase.
@@ -504,6 +518,7 @@ export class AppComponent {
 
     const next = [...presses, choice];
     this.pressed.set(next);
+    this.pressedOrder.set([...this.pressedOrder(), { cell: choice, step: next.length }]);
     if (next.length >= this.currentSequence().length) {
       const ms = Math.max(0, Math.round(performance.now() - this.trialStartedAt));
       const correct = next.join(',') === this.currentSequence().join(',');
@@ -539,6 +554,7 @@ export class AppComponent {
     this.phase.set('study');
     this.stepIndex.set(0);
     this.pressed.set([]);
+    this.pressedOrder.set([]);
     this.feedback.set(null);
     this.locTestPics.set({});
     this.trialStartedAt = performance.now();

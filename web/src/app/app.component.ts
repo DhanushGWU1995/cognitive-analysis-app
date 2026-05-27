@@ -194,7 +194,8 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
               *ngFor="let cell of [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]"
               [class.active]="phase() === 'study' && isLocationCellActive(cell)"
               [class.pressed]="isChoiceSelected(cell)"
-              [disabled]="phase() !== 'test' || !testChoices().includes(cell)"
+              [class.dim]="phase() === 'test' && !testChoices().includes(cell)"
+              [disabled]="phase() === 'test' ? !testChoices().includes(cell) : true"
               (click)="onPick(cell)"
             >
               <!-- Study: show ONLY the active cell picture (clearer). Test: show only choice cells. -->

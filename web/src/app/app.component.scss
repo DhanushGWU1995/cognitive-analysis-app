@@ -258,8 +258,12 @@ input {
 }
 
 .cell:disabled {
-  opacity: 0.25;
+  opacity: 1;
   cursor: default;
+}
+
+.cell.dim {
+  opacity: 0.25;
 }
 
 .cell.active {

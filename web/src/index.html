@@ -8,6 +8,32 @@
   <link rel="icon" type="image/x-icon" href="favicon.ico">
 </head>
 <body>
-  <app-root></app-root>
+  <app-root>
+    <style>
+      body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
+      .boot {
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: radial-gradient(1200px 800px at 20% 10%, #ffe8a3 0%, #ffd2ea 40%, #c7d2fe 90%);
+        color: #0f172a;
+      }
+      .boot-card{
+        background: rgba(255,255,255,0.75);
+        border: 1px solid rgba(15,23,42,0.1);
+        border-radius: 18px;
+        padding: 18px 20px;
+        box-shadow: 0 18px 60px rgba(15,23,42,0.12);
+        font-weight: 800;
+      }
+      .boot-sub{ font-weight: 600; opacity: 0.7; margin-top: 6px; font-size: 13px;}
+    </style>
+    <div class="boot">
+      <div class="boot-card">
+        Loading SELeCT Toddler Memory…
+        <div class="boot-sub">If this takes more than 10 seconds, refresh the page.</div>
+      </div>
+    </div>
+  </app-root>
 </body>
 </html>

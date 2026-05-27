@@ -267,25 +267,6 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
             </div>
           </div>
 
-          <div class="congrats" *ngIf="showCongrats()" role="dialog" aria-live="polite" aria-label="Congratulations">
-            <div class="congrats-backdrop"></div>
-            <div class="congrats-card">
-              <div class="congrats-orbit" aria-hidden="true">
-                <span class="orbit-item o1">✨</span>
-                <span class="orbit-item o2">⭐</span>
-                <span class="orbit-item o3">🎊</span>
-                <span class="orbit-item o4">🌟</span>
-                <span class="orbit-item o5">✨</span>
-                <span class="orbit-item o6">🎉</span>
-              </div>
-              <div class="congrats-hero">🎉</div>
-              <div class="congrats-video-wrap">
-                <video class="congrats-video" src="assets/video/congrats.mp4" autoplay muted playsinline></video>
-              </div>
-              <h2 class="congrats-title">You did it!</h2>
-              <p class="congrats-sub">Great job — keep going!</p>
-            </div>
-          </div>
         </section>
 
         <section class="card" *ngIf="screen() === 'results'">
@@ -298,6 +279,39 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
           <div class="mini">Completed: {{ results().length }} / {{ trials() }} trial(s)</div>
         </section>
       </main>
+
+      <div
+        class="congrats"
+        *ngIf="screen() === 'run' && showCongrats()"
+        role="dialog"
+        aria-live="polite"
+        aria-label="Congratulations"
+      >
+        <div class="congrats-backdrop"></div>
+        <div class="congrats-card">
+          <div class="congrats-orbit" aria-hidden="true">
+            <span class="orbit-item o1">✨</span>
+            <span class="orbit-item o2">⭐</span>
+            <span class="orbit-item o3">🎊</span>
+            <span class="orbit-item o4">🌟</span>
+            <span class="orbit-item o5">✨</span>
+            <span class="orbit-item o6">🎉</span>
+          </div>
+          <div class="congrats-hero">🎉</div>
+          <div class="congrats-video-wrap">
+            <video
+              class="congrats-video"
+              src="assets/video/congrats.mp4"
+              autoplay
+              muted
+              playsinline
+              preload="auto"
+            ></video>
+          </div>
+          <h2 class="congrats-title">You did it!</h2>
+          <p class="congrats-sub">Great job — keep going!</p>
+        </div>
+      </div>
     </div>
   `,
   styleUrl: './app.component.scss'

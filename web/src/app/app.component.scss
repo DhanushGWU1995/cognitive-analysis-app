@@ -328,56 +328,44 @@ input {
   border: 2px dashed rgba(15, 23, 42, 0.12);
 }
 
-.cell-step {
+.step-overlay {
   position: absolute;
-  inset: 0;
+  inset: 10px;
   z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  pointer-events: none;
+  background: rgba(15, 23, 42, 0.28);
+  border-radius: 12px;
+}
+
+.step-num {
   display: grid;
   place-items: center;
-  pointer-events: none;
-  background: rgba(15, 23, 42, 0.18);
-  backdrop-filter: blur(1px);
-}
-
-.cell-step .n {
-  display: inline-grid;
-  place-items: center;
-  width: 86px;
-  height: 86px;
-  border-radius: 26px;
-  background: rgba(34, 197, 94, 0.88);
-  border: 2px solid rgba(255, 255, 255, 0.9);
+  min-width: 1.1em;
+  padding: 0.08em 0.22em;
+  border-radius: 0.22em;
+  background: rgba(34, 197, 94, 0.92);
+  border: 3px solid rgba(255, 255, 255, 0.95);
   color: white;
   font-weight: 1000;
-  font-size: 42px;
-  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.25);
+  font-size: clamp(52px, 11vw, 96px);
+  line-height: 1;
+  box-shadow: 0 12px 36px rgba(15, 23, 42, 0.35);
 }
 
-.cell-step .s {
-  position: absolute;
-  bottom: 16px;
-  right: 16px;
-  font-size: 40px;
-  filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.25));
+.step-face {
+  font-size: clamp(48px, 10vw, 88px);
+  line-height: 1;
+  filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.35));
 }
 
-/* Picture test cards: slightly smaller overlay so it fits the tile */
-.choice .choice-step {
-  width: 72px;
-  height: 72px;
-  border-radius: 22px;
-  font-size: 34px;
-}
-
-.choice .choice-step .s {
-  bottom: 12px;
-  right: 12px;
-  font-size: 32px;
-}
-
-.choice {
-  position: relative;
-  overflow: hidden;
+.choice .step-overlay {
+  inset: 12px;
+  border-radius: 12px;
 }
 
 .choices {
@@ -400,6 +388,8 @@ input {
 }
 
 .choice {
+  position: relative;
+  overflow: hidden;
   border-radius: 18px;
   border: 1px solid rgba(15, 23, 42, 0.14);
   background: rgba(255, 255, 255, 0.92);

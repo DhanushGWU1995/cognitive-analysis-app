@@ -199,7 +199,21 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
             >
               <!-- Study: show ONLY the active cell picture (clearer). Test: show only choice cells. -->
               <ng-container *ngIf="(phase() === 'study' && isLocationCellActive(cell)) || (phase() === 'test' && testChoices().includes(cell)); else emptyCell">
-                <img class="pic" [src]="'assets/pics/' + pad3(cell) + '.jpg'" alt="" draggable="false" loading="lazy" />
+                <img
+                  class="pic"
+                  [src]="
+                    'assets/pics/' +
+                    pad3(
+                      phase() === 'study'
+                        ? locStudyPicId()
+                        : (locTestPics()[cell] ?? 1)
+                    ) +
+                    '.jpg'
+                  "
+                  alt=""
+                  draggable="false"
+                  loading="lazy"
+                />
               </ng-container>
               <ng-template #emptyCell>
                 <div class="cell-empty" aria-hidden="true"></div>
@@ -269,6 +283,9 @@ export class AppComponent {
   readonly pressed = signal<number[]>([]);
   readonly feedback = signal<'correct' | 'wrong' | null>(null);
   readonly showCongrats = signal(false);
+  // Location task: pictures are just visual tokens (identity irrelevant)
+  readonly locStudyPicId = signal(1);
+  readonly locTestPics = signal<Record<number, number>>({});
 
   // A tiny built-in demo sequence plan (one line per trial)
   readonly locationSequences = signal<number[][]>([
@@ -394,6 +411,7 @@ export class AppComponent {
     this.pressed.set([]);
     this.feedback.set(null);
     this.showCongrats.set(false);
+    this.locTestPics.set({});
     this.trialStartedAt = performance.now();
     this.screen.set('run');
     this._runStudyTick();
@@ -404,6 +422,9 @@ export class AppComponent {
     this.phase.set('study');
     this.feedback.set(null);
     this.countdown.set(this.studySeconds());
+    if (this.taskType() === this.TaskType.Location) {
+      this.locStudyPicId.set(this._randPic());
+    }
 
     const tick = () => {
       const left = this.countdown();
@@ -432,6 +453,23 @@ export class AppComponent {
     this.stepIndex.set(0);
     this.pressed.set([]);
     this.feedback.set(null);
+    if (this.taskType() === this.TaskType.Location) {
+      // Assign random pictures to each visible location cell for this trial's test phase.
+      const choices = this.testChoices();
+      const mapping: Record<number, number> = {};
+      const studyPic = this.locStudyPicId();
+      const targets = new Set(this.currentSequence());
+      for (const cell of choices) {
+        if (targets.has(cell)) {
+          // Ensure targets do not use the same picture as the study phase.
+          mapping[cell] = this._randPic(new Set([studyPic]));
+        } else {
+          // Distractors may (or may not) match the study picture; allow it naturally.
+          mapping[cell] = this._randPic();
+        }
+      }
+      this.locTestPics.set(mapping);
+    }
     this._stopTimer();
   }
 
@@ -491,6 +529,7 @@ export class AppComponent {
     this.stepIndex.set(0);
     this.pressed.set([]);
     this.feedback.set(null);
+    this.locTestPics.set({});
     this.trialStartedAt = performance.now();
     this._runStudyTick();
   }
@@ -581,6 +620,17 @@ export class AppComponent {
   pad3(n: number) {
     const x = Math.max(0, Math.floor(n));
     return x.toString().padStart(3, '0');
+  }
+
+  private _randPic(avoid: Set<number> = new Set()) {
+    // pics are 1..99
+    for (let i = 0; i < 40; i++) {
+      const r = 1 + Math.floor(Math.random() * 99);
+      if (!avoid.has(r)) return r;
+    }
+    // fallback
+    for (let r = 1; r <= 99; r++) if (!avoid.has(r)) return r;
+    return 1;
   }
 
   setPictureStep(trialIdx: number, stepIdx: number, value: string) {

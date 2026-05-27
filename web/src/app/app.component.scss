@@ -328,6 +328,32 @@ input {
   transform: translateX(-50%);
 }
 
+.congrats {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(15, 23, 42, 0.35);
+  backdrop-filter: blur(6px);
+}
+
+.congrats-video {
+  width: min(860px, 92vw);
+  max-height: 62vh;
+  border-radius: 18px;
+  box-shadow: 0 30px 90px rgba(15, 23, 42, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+}
+
+.congrats-text {
+  margin-top: 14px;
+  font-weight: 1000;
+  font-size: 34px;
+  letter-spacing: -0.02em;
+  color: white;
+  text-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+}
+
 .pill {
   padding: 10px 14px;
   border-radius: 999px;

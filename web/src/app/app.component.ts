@@ -210,8 +210,8 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
             >
               <div class="step-overlay" *ngIf="phase() === 'test' && pressedBadges()[cell] as n">
                 <div class="step-overlay-cluster" aria-hidden="true">
-                  <span class="step-face">😊</span>
                   <span class="step-num">{{ n }}</span>
+                  <span class="step-face">😊</span>
                 </div>
               </div>
               <!-- Study: show ONLY the active cell picture (clearer). Test: show only choice cells. -->
@@ -252,8 +252,8 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
               >
                 <div class="step-overlay" *ngIf="pressedBadgesPic()[p] as n">
                   <div class="step-overlay-cluster" aria-hidden="true">
-                    <span class="step-face">😊</span>
                     <span class="step-num">{{ n }}</span>
+                    <span class="step-face">😊</span>
                   </div>
                 </div>
                 <img class="pic" [src]="'assets/pics/' + pad3(p) + '.jpg'" alt="" loading="lazy" />

@@ -192,12 +192,18 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
             <button
               class="cell"
               *ngFor="let cell of [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]"
-              [class.active]="isLocationCellActive(cell)"
+              [class.active]="phase() === 'study' && isLocationCellActive(cell)"
               [class.pressed]="isChoiceSelected(cell)"
               [disabled]="phase() !== 'test' || !testChoices().includes(cell)"
               (click)="onPick(cell)"
             >
-              <img class="pic" [src]="'assets/pics/' + pad3(cell) + '.jpg'" alt="" draggable="false" />
+              <!-- Study: show ONLY the active cell picture (clearer). Test: show only choice cells. -->
+              <ng-container *ngIf="(phase() === 'study' && isLocationCellActive(cell)) || (phase() === 'test' && testChoices().includes(cell)); else emptyCell">
+                <img class="pic" [src]="'assets/pics/' + pad3(cell) + '.jpg'" alt="" draggable="false" loading="lazy" />
+              </ng-container>
+              <ng-template #emptyCell>
+                <div class="cell-empty" aria-hidden="true"></div>
+              </ng-template>
             </button>
           </div>
 
@@ -564,8 +570,8 @@ export class AppComponent {
     const seq = this.currentSequence();
     if (this.phase() === 'study') return seq[this.stepIndex()] === cell;
     if (this.phase() !== 'test') return false;
-    // highlight next expected location
-    return this.expectedNext() === cell;
+    // During test, do not auto-highlight the correct answer.
+    return false;
   }
 
   isChoiceSelected(choice: number) {

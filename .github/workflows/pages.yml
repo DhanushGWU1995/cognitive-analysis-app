@@ -45,7 +45,8 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: web/dist/web
+          # Angular 19 outputs to dist/web/browser for browser-only apps
+          path: web/dist/web/browser
 
   deploy:
     environment:

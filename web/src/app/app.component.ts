@@ -22,15 +22,15 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
             <button class="big-btn" (click)="goSetup(TaskType.Location)">
               <div class="emoji">📍</div>
               <div class="txt">
-                <div class="t">Location memory</div>
-                <div class="d">Remember where it appears.</div>
+                <div class="t">Spatial Task</div>
+                <div class="d">Remember locations.</div>
               </div>
             </button>
             <button class="big-btn" (click)="goSetup(TaskType.Picture)">
               <div class="emoji">🖼️</div>
               <div class="txt">
-                <div class="t">Picture memory</div>
-                <div class="d">Remember which picture it is.</div>
+                <div class="t">Object Task</div>
+                <div class="d">Remember pictures.</div>
               </div>
             </button>
           </div>
@@ -43,7 +43,7 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
 
         <section class="card" *ngIf="screen() === 'setup'">
           <h1>Setup</h1>
-          <p class="muted">Task: <b>{{ taskType() }}</b></p>
+          <p class="muted">Task: <b>{{ taskTitle() }}</b> — {{ taskTagline() }}</p>
 
           <div class="form">
             <label>
@@ -70,7 +70,7 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
 
           <div class="test-mode-picker">
             <h2>Test mode</h2>
-            <p class="muted small">Applies to location and picture tasks. Pick a preset, then fine-tune below if needed.</p>
+            <p class="muted small">Applies to Spatial and Object tasks. Pick a preset, then fine-tune below if needed.</p>
             <div class="test-mode-options">
               <label class="test-mode-card" [class.selected]="testMode() === TestMode.Standard">
                 <input
@@ -106,7 +106,7 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
           </div>
 
           <div class="feedback-flags">
-            <h2>Step feedback (location and picture tasks)</h2>
+            <h2>Step feedback (Spatial and Object tasks)</h2>
             <p class="muted small">Shown on the grid after each correct tap during test.</p>
             <div class="flag-grid">
               <label class="flag">
@@ -162,9 +162,9 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
           <div class="seq-editor" *ngIf="taskType() === TaskType.Picture">
             <div class="seq-editor-head">
               <div>
-                <h2>Picture sequence</h2>
+                <h2>Object sequence</h2>
                 <p class="muted small">
-                  Pick a picture for each step. StepsNum controls how many picks per trial.
+                  Pick a picture for each step (Object Task). StepsNum controls how many picks per trial.
                 </p>
               </div>
               <div class="seq-tools">
@@ -233,7 +233,7 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
             <div class="picker" (click)="$event.stopPropagation()">
               <div class="picker-top">
                 <div class="picker-title">
-                  Pick picture —
+                  Pick object —
                   {{
                     sameSequenceForAllTrials()
                       ? 'All trials'
@@ -261,8 +261,8 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
           <div class="seq-editor" *ngIf="taskType() === TaskType.Location">
             <div class="seq-editor-head">
               <div>
-                <h2>Location sequence</h2>
-                <p class="muted small">Pick a grid cell (1–16) for each step. StepsNum controls how many picks per trial.</p>
+                <h2>Spatial sequence</h2>
+                <p class="muted small">Pick a grid cell (1–16) for each step (Spatial Task). StepsNum controls how many picks per trial.</p>
               </div>
               <div class="seq-tools">
                 <label class="seq-toggle">
@@ -352,18 +352,10 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
 
         <section class="stage" *ngIf="screen() === 'run'">
           <div class="stage-top">
-            <div class="title" *ngIf="phase() === 'study'">
-              {{ taskType() === TaskType.Location ? 'Location memory' : 'Picture memory' }}
-            </div>
-            <div class="subtitle" *ngIf="phase() === 'study'">
-              {{
-                taskType() === TaskType.Location
-                  ? 'Watch where it appears. Remember the place, not the picture.'
-                  : 'Watch each picture. Remember the image, not where it appears.'
-              }}
-            </div>
+            <div class="title" *ngIf="phase() === 'study'">{{ taskTitle() }}</div>
+            <div class="subtitle" *ngIf="phase() === 'study'">{{ taskTagline() }}</div>
             <div class="meta" *ngIf="phase() === 'study'">
-              {{ taskType() === TaskType.Location ? 'Place' : 'Picture' }} {{ stepIndex() + 1 }} of {{ trialSequence().length }} ·
+              {{ isSpatialTask() ? 'Location' : 'Picture' }} {{ stepIndex() + 1 }} of {{ trialSequence().length }} ·
               <span class="countdown">{{ countdown() }}</span>
             </div>
 
@@ -379,9 +371,9 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
             <div class="title" *ngIf="phase() === 'test'">
               {{
                 testMode() === TestMode.FreeRecall
-                  ? (taskType() === TaskType.Location ? 'Touch each place!' : 'Touch each picture!')
-                  : taskType() === TaskType.Location
-                    ? 'Touch each place in order!'
+                  ? (isSpatialTask() ? 'Touch each location!' : 'Touch each picture!')
+                  : isSpatialTask()
+                    ? 'Touch each location in order!'
                     : 'Touch each picture in order!'
               }}
             </div>
@@ -703,6 +695,18 @@ export class AppComponent {
     this.taskType.set(type);
     this.sameSequenceForAllTrials.set(false);
     this.screen.set('setup');
+  }
+
+  taskTitle() {
+    return this.isSpatialTask() ? 'Spatial Task' : 'Object Task';
+  }
+
+  taskTagline() {
+    return this.isSpatialTask() ? 'Remember locations' : 'Remember pictures';
+  }
+
+  isSpatialTask() {
+    return this.taskType() === this.TaskType.Location;
   }
 
   setSameSequenceForAllTrials(on: boolean) {

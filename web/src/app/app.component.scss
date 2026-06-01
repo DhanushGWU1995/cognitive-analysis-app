@@ -622,6 +622,10 @@ input {
   margin: 0 0 12px;
 }
 
+.feedback-flags .response-hint {
+  margin: 14px 0 8px;
+}
+
 .flag-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

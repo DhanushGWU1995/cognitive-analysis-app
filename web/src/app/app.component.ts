@@ -68,6 +68,43 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
             </label>
           </div>
 
+          <div class="test-mode-picker">
+            <h2>Test mode</h2>
+            <p class="muted small">Applies to location and picture tasks. Pick a preset, then fine-tune below if needed.</p>
+            <div class="test-mode-options">
+              <label class="test-mode-card" [class.selected]="testMode() === TestMode.Standard">
+                <input
+                  type="radio"
+                  name="testMode"
+                  [checked]="testMode() === TestMode.Standard"
+                  (change)="setTestMode(TestMode.Standard)"
+                />
+                <span class="test-mode-title">(A) Standard test</span>
+                <span class="test-mode-desc">Border + correct sound on right taps. Wrong sound, grid clears, next trial on error.</span>
+              </label>
+              <label class="test-mode-card" [class.selected]="testMode() === TestMode.FreeRecall">
+                <input
+                  type="radio"
+                  name="testMode"
+                  [checked]="testMode() === TestMode.FreeRecall"
+                  (change)="setTestMode(TestMode.FreeRecall)"
+                />
+                <span class="test-mode-title">(B) Free recall</span>
+                <span class="test-mode-desc">Border + neutral sound on every tap. No right/wrong feedback.</span>
+              </label>
+              <label class="test-mode-card" [class.selected]="testMode() === TestMode.AdvanceWhenCorrect">
+                <input
+                  type="radio"
+                  name="testMode"
+                  [checked]="testMode() === TestMode.AdvanceWhenCorrect"
+                  (change)="setTestMode(TestMode.AdvanceWhenCorrect)"
+                />
+                <span class="test-mode-title">(C) Advance when correct</span>
+                <span class="test-mode-desc">Wrong sound on errors. Trial continues until the sequence is correct.</span>
+              </label>
+            </div>
+          </div>
+
           <div class="feedback-flags">
             <h2>Step feedback (location and picture tasks)</h2>
             <p class="muted small">Shown on the grid after each correct tap during test.</p>
@@ -340,12 +377,28 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
             </div>
 
             <div class="title" *ngIf="phase() === 'test'">
-              {{ taskType() === TaskType.Location ? 'Touch each place in order!' : 'Touch each picture in order!' }}
+              {{
+                testMode() === TestMode.FreeRecall
+                  ? (taskType() === TaskType.Location ? 'Touch each place!' : 'Touch each picture!')
+                  : taskType() === TaskType.Location
+                    ? 'Touch each place in order!'
+                    : 'Touch each picture in order!'
+              }}
             </div>
-            <div class="subtitle" *ngIf="phase() === 'test'">Step {{ pressed().length + 1 }} of {{ trialSequence().length }}</div>
+            <div class="subtitle" *ngIf="phase() === 'test' && testMode() !== TestMode.FreeRecall">
+              Step {{ pressed().length + 1 }} of {{ trialSequence().length }}
+            </div>
+            <div class="subtitle" *ngIf="phase() === 'test' && testMode() === TestMode.FreeRecall">
+              Response {{ pressed().length + 1 }} of {{ trialSequence().length }}
+            </div>
             <div
               class="step-progress"
-              *ngIf="phase() === 'test' && !showCongrats() && (feedbackStepNumber() || feedbackSmiley())"
+              *ngIf="
+                phase() === 'test' &&
+                !showCongrats() &&
+                testMode() !== TestMode.FreeRecall &&
+                (feedbackStepNumber() || feedbackSmiley())
+              "
             >
               <div
                 class="step-badge"
@@ -372,6 +425,7 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
                 class="step-overlay"
                 *ngIf="
                   phase() === 'test' &&
+                  testMode() !== TestMode.FreeRecall &&
                   !showCongrats() &&
                   gridStepBadge(cell) &&
                   (feedbackStepNumber() || feedbackSmiley())
@@ -399,7 +453,7 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
             </button>
           </div>
 
-          <div class="feedback" *ngIf="feedback()">
+          <div class="feedback" *ngIf="feedback() && testMode() !== TestMode.FreeRecall">
             <div class="pill" [class.ok]="feedback() === 'correct'" [class.no]="feedback() === 'wrong'">
               {{ feedback() === 'correct' ? 'Correct!' : 'Try again' }}
             </div>
@@ -460,6 +514,12 @@ export class AppComponent {
     Picture: 'picture',
   } as const;
 
+  readonly TestMode = {
+    Standard: 'standard',
+    FreeRecall: 'freeRecall',
+    AdvanceWhenCorrect: 'advanceWhenCorrect',
+  } as const;
+
   readonly screen = signal<'home' | 'setup' | 'run' | 'results'>('home');
   readonly taskType = signal<(typeof this.TaskType)[keyof typeof this.TaskType]>(this.TaskType.Location);
 
@@ -477,6 +537,9 @@ export class AppComponent {
   readonly feedbackEveryResponse = signal(true);
   /** Sound + Try again on every wrong tap. If false, only the first wrong tap per trial. */
   readonly feedbackEveryError = signal(true);
+  readonly testMode = signal<(typeof this.TestMode)[keyof typeof this.TestMode]>(
+    this.TestMode.AdvanceWhenCorrect,
+  );
   /** When true, one sequence row applies to every trial (trial 1 is the master). */
   readonly sameSequenceForAllTrials = signal(false);
 
@@ -527,6 +590,7 @@ export class AppComponent {
     Array<{
       trial: number;
       taskType: 'location' | 'picture';
+      testMode: string;
       sequence: number[];
       presses: number[];
       correct: boolean;
@@ -605,6 +669,34 @@ export class AppComponent {
         this.locationSequences.set(next);
       }
     });
+    this.setTestMode(this.testMode());
+  }
+
+  setTestMode(mode: (typeof this.TestMode)[keyof typeof this.TestMode]) {
+    this.testMode.set(mode);
+    switch (mode) {
+      case this.TestMode.Standard:
+        this.feedbackBorder.set(true);
+        this.feedbackStepNumber.set(false);
+        this.feedbackSmiley.set(false);
+        this.feedbackEveryResponse.set(true);
+        this.feedbackEveryError.set(true);
+        break;
+      case this.TestMode.FreeRecall:
+        this.feedbackBorder.set(true);
+        this.feedbackStepNumber.set(false);
+        this.feedbackSmiley.set(false);
+        this.feedbackEveryResponse.set(true);
+        this.feedbackEveryError.set(false);
+        break;
+      case this.TestMode.AdvanceWhenCorrect:
+        this.feedbackBorder.set(false);
+        this.feedbackStepNumber.set(false);
+        this.feedbackSmiley.set(false);
+        this.feedbackEveryResponse.set(true);
+        this.feedbackEveryError.set(true);
+        break;
+    }
   }
 
   goSetup(type: 'location' | 'picture') {
@@ -764,6 +856,11 @@ export class AppComponent {
 
   onPick(choice: number) {
     if (this.phase() !== 'test') return;
+    if (this.testMode() === this.TestMode.FreeRecall) {
+      this._onPickFreeRecall(choice);
+      return;
+    }
+
     const presses = this.pressed();
     const expected = this.expectedNext();
 
@@ -774,6 +871,18 @@ export class AppComponent {
     const isFirstTap = this.trialTapCount === 1;
     const ok = choice === expected;
     const giveFeedback = this._shouldGiveFeedback(ok, isFirstTap);
+
+    if (!ok && this.testMode() === this.TestMode.Standard) {
+      if (giveFeedback) {
+        this.feedback.set('wrong');
+        this._play('wrong');
+        window.setTimeout(() => this.feedback.set(null), 450);
+      } else {
+        this._play('wrong');
+      }
+      this._failTrialAndAdvance();
+      return;
+    }
 
     if (giveFeedback) {
       this.feedback.set(ok ? 'correct' : 'wrong');
@@ -791,27 +900,69 @@ export class AppComponent {
     this.pressed.set(next);
     this.pressedOrder.set([...this.pressedOrder(), { cell: choice, step: next.length }]);
     if (next.length >= this.trialSequence().length) {
-      const ms = Math.max(0, Math.round(performance.now() - this.trialStartedAt));
-      const seq = this.trialSequence();
-      const correct = next.join(',') === seq.join(',');
-      this.results.set([
-        ...this.results(),
-        {
-          trial: this.trialIndex() + 1,
-          taskType: this.taskType(),
-          sequence: seq,
-          presses: next,
-          correct,
-          ms,
-        },
-      ]);
-
-      this._play('success');
-      this._congratsBurst();
-      window.setTimeout(() => this._nextTrialOrDone(), 900);
+      this._completeTrial(next);
     } else if (giveFeedback) {
       window.setTimeout(() => this.feedback.set(null), 450);
     }
+  }
+
+  private _onPickFreeRecall(choice: number) {
+    const presses = this.pressed();
+    const next = [...presses, choice];
+    this.trialTapCount++;
+    const isFirstTap = this.trialTapCount === 1;
+    const giveFeedback = this._shouldGiveFeedback(true, isFirstTap);
+
+    this.pressed.set(next);
+    this.pressedOrder.set([...this.pressedOrder(), { cell: choice, step: next.length }]);
+
+    if (giveFeedback) {
+      this._play('neutral');
+    }
+
+    if (next.length >= this.trialSequence().length) {
+      this._completeTrial(next);
+    }
+  }
+
+  private _completeTrial(presses: number[]) {
+    const ms = Math.max(0, Math.round(performance.now() - this.trialStartedAt));
+    const seq = this.trialSequence();
+    const correct = presses.join(',') === seq.join(',');
+    this._recordTrialResult(presses, correct, ms);
+
+    this._play('success');
+    this._congratsBurst();
+    window.setTimeout(() => this._nextTrialOrDone(), 900);
+  }
+
+  private _failTrialAndAdvance() {
+    const presses = this.pressed();
+    const ms = Math.max(0, Math.round(performance.now() - this.trialStartedAt));
+    this._recordTrialResult(presses, false, ms);
+    this._hideTestGrid();
+    window.setTimeout(() => this._nextTrialOrDone(), 700);
+  }
+
+  private _recordTrialResult(presses: number[], correct: boolean, ms: number) {
+    this.results.set([
+      ...this.results(),
+      {
+        trial: this.trialIndex() + 1,
+        taskType: this.taskType(),
+        testMode: this.testMode(),
+        sequence: this.trialSequence(),
+        presses,
+        correct,
+        ms,
+      },
+    ]);
+  }
+
+  private _hideTestGrid() {
+    this.locTestPics.set({});
+    this.picTestCellToPic.set({});
+    this.trialTestCells.set([]);
   }
 
   private _shouldGiveFeedback(isCorrect: boolean, isFirstTap: boolean) {
@@ -842,7 +993,7 @@ export class AppComponent {
 
   downloadCsv() {
     const rows = this.results();
-    const header = ['subject', 'trial', 'taskType', 'sequence', 'presses', 'correct', 'ms'];
+    const header = ['subject', 'trial', 'taskType', 'testMode', 'sequence', 'presses', 'correct', 'ms'];
     const lines = [
       header.join(','),
       ...rows.map((r) =>
@@ -850,6 +1001,7 @@ export class AppComponent {
           this.subjectId().trim(),
           r.trial,
           r.taskType,
+          r.testMode,
           `"${r.sequence.join(' ')}"`,
           `"${r.presses.join(' ')}"`,
           r.correct ? '1' : '0',
@@ -881,15 +1033,18 @@ export class AppComponent {
     this.congratsTimer = window.setTimeout(() => this.showCongrats.set(false), 3200);
   }
 
-  private _play(name: 'correct' | 'wrong' | 'success') {
+  private _play(name: 'correct' | 'wrong' | 'success' | 'neutral') {
     const map: Record<typeof name, string> = {
       correct: 'assets/sfx/ding2.mp3',
       wrong: 'assets/sfx/whoosh1.wav',
       success: 'assets/sfx/applause.mp3',
+      neutral: 'assets/sfx/ding2.mp3',
     };
     this._stopAllAudio();
     const audio = new Audio(map[name]);
-    audio.volume = name === 'success' ? 0.75 : 0.9;
+    const volume =
+      name === 'success' ? 0.75 : name === 'neutral' ? 0.55 : 0.9;
+    audio.volume = volume;
     audio.currentTime = 0;
     this.activeAudio = [audio];
     void audio.play().catch(() => {});

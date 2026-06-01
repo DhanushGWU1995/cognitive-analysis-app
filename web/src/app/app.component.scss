@@ -604,6 +604,64 @@ input {
   font-size: 13px;
 }
 
+.test-mode-picker {
+  margin-top: 18px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.test-mode-picker h2 {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.test-mode-picker .muted {
+  margin: 0 0 12px;
+}
+
+.test-mode-options {
+  display: grid;
+  gap: 10px;
+}
+
+.test-mode-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 2px solid rgba(15, 23, 42, 0.1);
+  background: rgba(255, 255, 255, 0.92);
+  cursor: pointer;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.test-mode-card.selected {
+  border-color: rgba(79, 70, 229, 0.55);
+  box-shadow: 0 10px 28px rgba(79, 70, 229, 0.12);
+}
+
+.test-mode-card input {
+  margin-top: 4px;
+  accent-color: #4f46e5;
+}
+
+.test-mode-title {
+  font-weight: 900;
+  font-size: 14px;
+  color: #0f172a;
+}
+
+.test-mode-desc {
+  grid-column: 2;
+  font-size: 12.5px;
+  color: rgba(15, 23, 42, 0.72);
+  line-height: 1.35;
+}
+
 .feedback-flags {
   margin-top: 18px;
   padding: 14px 16px;

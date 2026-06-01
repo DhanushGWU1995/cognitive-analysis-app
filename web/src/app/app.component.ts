@@ -97,6 +97,29 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
                 <span>Happy face</span>
               </label>
             </div>
+            <p class="muted small response-hint">Sound and Correct / Try again pill during test:</p>
+            <div class="flag-grid">
+              <label class="flag">
+                <input
+                  type="checkbox"
+                  [checked]="feedbackEveryResponse()"
+                  (change)="feedbackEveryResponse.set($any($event.target).checked)"
+                />
+                <span>Every response</span>
+              </label>
+              <label class="flag">
+                <input
+                  type="checkbox"
+                  [checked]="feedbackEveryError()"
+                  (change)="feedbackEveryError.set($any($event.target).checked)"
+                />
+                <span>Every wrong tap</span>
+              </label>
+            </div>
+            <p class="muted small">
+              Turn off <b>Every response</b> for first tap only. Turn off <b>Every wrong tap</b> to show Try again
+              only on the first mistake.
+            </p>
           </div>
 
           <div class="seq-editor" *ngIf="taskType() === TaskType.Picture">
@@ -450,6 +473,10 @@ export class AppComponent {
   readonly feedbackBorder = signal(true);
   readonly feedbackStepNumber = signal(true);
   readonly feedbackSmiley = signal(true);
+  /** Sound + pill on every tap (correct and wrong). If false, only the first tap gets them. */
+  readonly feedbackEveryResponse = signal(true);
+  /** Sound + Try again on every wrong tap. If false, only the first wrong tap per trial. */
+  readonly feedbackEveryError = signal(true);
   /** When true, one sequence row applies to every trial (trial 1 is the master). */
   readonly sameSequenceForAllTrials = signal(false);
 
@@ -508,6 +535,7 @@ export class AppComponent {
   >([]);
 
   private trialStartedAt = 0;
+  private trialTapCount = 0;
   private timer: number | null = null;
   private congratsTimer: number | null = null;
   private activeAudio: HTMLAudioElement[] = [];
@@ -697,6 +725,7 @@ export class AppComponent {
     } else {
       this._buildPicTestLayout();
     }
+    this.trialTapCount = 0;
     this._stopTimer();
   }
 
@@ -741,13 +770,20 @@ export class AppComponent {
     // Ignore repeats unless it is the next expected step (handles 13,13 sequences).
     if (presses.includes(choice) && choice !== expected) return;
 
+    this.trialTapCount++;
+    const isFirstTap = this.trialTapCount === 1;
     const ok = choice === expected;
-    this.feedback.set(ok ? 'correct' : 'wrong');
-    this._play(ok ? 'correct' : 'wrong');
+    const giveFeedback = this._shouldGiveFeedback(ok, isFirstTap);
+
+    if (giveFeedback) {
+      this.feedback.set(ok ? 'correct' : 'wrong');
+      this._play(ok ? 'correct' : 'wrong');
+    }
 
     if (!ok) {
-      // brief feedback then clear
-      window.setTimeout(() => this.feedback.set(null), 450);
+      if (giveFeedback) {
+        window.setTimeout(() => this.feedback.set(null), 450);
+      }
       return;
     }
 
@@ -773,9 +809,15 @@ export class AppComponent {
       this._play('success');
       this._congratsBurst();
       window.setTimeout(() => this._nextTrialOrDone(), 900);
-    } else {
+    } else if (giveFeedback) {
       window.setTimeout(() => this.feedback.set(null), 450);
     }
+  }
+
+  private _shouldGiveFeedback(isCorrect: boolean, isFirstTap: boolean) {
+    if (this.feedbackEveryResponse()) return true;
+    if (!isCorrect && this.feedbackEveryError()) return true;
+    return isFirstTap;
   }
 
   private _nextTrialOrDone() {

@@ -68,6 +68,37 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
             </label>
           </div>
 
+          <div class="feedback-flags">
+            <h2>Step feedback (location and picture tasks)</h2>
+            <p class="muted small">Shown on the grid after each correct tap during test.</p>
+            <div class="flag-grid">
+              <label class="flag">
+                <input
+                  type="checkbox"
+                  [checked]="feedbackBorder()"
+                  (change)="feedbackBorder.set($any($event.target).checked)"
+                />
+                <span>Border highlight</span>
+              </label>
+              <label class="flag">
+                <input
+                  type="checkbox"
+                  [checked]="feedbackStepNumber()"
+                  (change)="feedbackStepNumber.set($any($event.target).checked)"
+                />
+                <span>Step number</span>
+              </label>
+              <label class="flag">
+                <input
+                  type="checkbox"
+                  [checked]="feedbackSmiley()"
+                  (change)="feedbackSmiley.set($any($event.target).checked)"
+                />
+                <span>Happy face</span>
+              </label>
+            </div>
+          </div>
+
           <div class="seq-editor" *ngIf="taskType() === TaskType.Picture">
             <div class="seq-editor-head">
               <div>
@@ -289,14 +320,17 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
               {{ taskType() === TaskType.Location ? 'Touch each place in order!' : 'Touch each picture in order!' }}
             </div>
             <div class="subtitle" *ngIf="phase() === 'test'">Step {{ pressed().length + 1 }} of {{ trialSequence().length }}</div>
-            <div class="step-progress" *ngIf="phase() === 'test' && !showCongrats()">
+            <div
+              class="step-progress"
+              *ngIf="phase() === 'test' && !showCongrats() && (feedbackStepNumber() || feedbackSmiley())"
+            >
               <div
                 class="step-badge"
                 *ngFor="let _ of [].constructor(trialSequence().length); let i = index"
                 [class.done]="i < pressed().length"
               >
-                <span class="num">{{ i + 1 }}</span>
-                <span class="face" *ngIf="i < pressed().length">😊</span>
+                <span class="num" *ngIf="feedbackStepNumber()">{{ i + 1 }}</span>
+                <span class="face" *ngIf="feedbackSmiley() && i < pressed().length">😊</span>
               </div>
             </div>
           </div>
@@ -305,16 +339,26 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
             <button
               class="cell"
               *ngFor="let cell of gridCells"
-              [class.active]="isGridCellActive(cell)"
-              [class.pressed]="isGridCellPressed(cell)"
+              [class.active]="feedbackBorder() && isGridCellActive(cell)"
+              [class.pressed]="feedbackBorder() && isGridCellPressed(cell)"
               [class.dim]="isGridCellDim(cell)"
               [disabled]="isGridCellDisabled(cell)"
               (click)="onGridCellClick(cell)"
             >
-              <div class="step-overlay" *ngIf="phase() === 'test' && !showCongrats() && gridStepBadge(cell) as n">
+              <div
+                class="step-overlay"
+                *ngIf="
+                  phase() === 'test' &&
+                  !showCongrats() &&
+                  gridStepBadge(cell) &&
+                  (feedbackStepNumber() || feedbackSmiley())
+                "
+              >
                 <div class="step-overlay-cluster" aria-hidden="true">
-                  <span class="step-num">{{ n }}</span>
-                  <span class="step-face">😊</span>
+                  <span class="step-num" *ngIf="feedbackStepNumber()" [class.badge-border]="feedbackBorder()">{{
+                    gridStepBadge(cell)
+                  }}</span>
+                  <span class="step-face" *ngIf="feedbackSmiley()">😊</span>
                 </div>
               </div>
               <ng-container *ngIf="showImageInGridCell(cell); else emptyCell">
@@ -402,6 +446,10 @@ export class AppComponent {
   readonly stepsNum = signal(2);
   readonly distractorsN = signal(1);
   readonly studySeconds = signal(5);
+  /** Correct-step feedback toggles (location + picture test). */
+  readonly feedbackBorder = signal(true);
+  readonly feedbackStepNumber = signal(true);
+  readonly feedbackSmiley = signal(true);
   /** When true, one sequence row applies to every trial (trial 1 is the master). */
   readonly sameSequenceForAllTrials = signal(false);
 

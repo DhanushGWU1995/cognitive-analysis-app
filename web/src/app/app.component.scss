@@ -377,13 +377,18 @@ input {
   padding: 0.06em 0.2em;
   border-radius: 0.2em;
   background: rgba(34, 197, 94, 0.92);
-  border: 3px solid rgba(255, 255, 255, 0.95);
+  border: none;
   color: white;
   font-weight: 1000;
   font-size: clamp(44px, 9vw, 72px);
   line-height: 1;
-  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.35);
+  box-shadow: none;
   flex-shrink: 0;
+}
+
+.step-num.badge-border {
+  border: 3px solid rgba(255, 255, 255, 0.95);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.35);
 }
 
 .step-face {
@@ -597,6 +602,56 @@ input {
   margin-top: 12px;
   color: rgba(15, 23, 42, 0.7);
   font-size: 13px;
+}
+
+.feedback-flags {
+  margin-top: 18px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.feedback-flags h2 {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.feedback-flags .muted {
+  margin: 0 0 12px;
+}
+
+.flag-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+@media (max-width: 720px) {
+  .flag-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.flag {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: rgba(255, 255, 255, 0.9);
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  user-select: none;
+}
+
+.flag input {
+  width: 16px;
+  height: 16px;
+  accent-color: #4f46e5;
 }
 
 .seq-editor {

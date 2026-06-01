@@ -69,24 +69,71 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
           </div>
 
           <div class="seq-editor" *ngIf="taskType() === TaskType.Picture">
-            <h2>Picture sequence (one row per trial)</h2>
-            <p class="muted small">Pick a picture for each step. StepsNum controls how many dropdowns appear per trial.</p>
+            <div class="seq-editor-head">
+              <div>
+                <h2>Picture sequence</h2>
+                <p class="muted small">
+                  Pick a picture for each step. StepsNum controls how many picks per trial.
+                </p>
+              </div>
+              <div class="seq-tools">
+                <label class="seq-toggle">
+                  <input
+                    type="checkbox"
+                    [checked]="sameSequenceForAllTrials()"
+                    (change)="setSameSequenceForAllTrials($any($event.target).checked)"
+                  />
+                  <span>Same sequence for all trials</span>
+                </label>
+                <button
+                  type="button"
+                  class="btn ghost seq-apply"
+                  [disabled]="trials() <= 1"
+                  (click)="applySequenceToAllTrials()"
+                >
+                  Apply trial 1 to all
+                </button>
+              </div>
+            </div>
 
             <div class="seq-table">
               <div class="seq-row header">
-                <div class="cell h">Trial</div>
+                <div class="cell h">{{ sameSequenceForAllTrials() ? 'All trials' : 'Trial' }}</div>
                 <div class="cell h" *ngFor="let _ of [].constructor(stepsNum()); let si = index">Step {{ si + 1 }}</div>
               </div>
 
-              <div class="seq-row" *ngFor="let _ of [].constructor(trials()); let ti = index">
-                <div class="cell trial">{{ ti + 1 }}</div>
-                <div class="cell" *ngFor="let __ of [].constructor(stepsNum()); let si = index">
-                  <button class="pick pick-visual" type="button" (click)="openPicPicker(ti, si)">
-                    <img class="pick-thumb" [src]="'assets/pics/' + pad3(pictureSequences()[ti][si]) + '.jpg'" alt="" loading="lazy" />
-                    <span class="pick-label">{{ pad3(pictureSequences()[ti][si]) }}</span>
-                  </button>
+              <ng-container *ngIf="sameSequenceForAllTrials(); else picturePerTrialRows">
+                <div class="seq-row">
+                  <div class="cell trial synced">★</div>
+                  <div class="cell" *ngFor="let __ of [].constructor(stepsNum()); let si = index">
+                    <button class="pick pick-visual" type="button" (click)="openPicPicker(0, si)">
+                      <img
+                        class="pick-thumb"
+                        [src]="'assets/pics/' + pad3(pictureSequences()[0][si]) + '.jpg'"
+                        alt=""
+                        loading="lazy"
+                      />
+                      <span class="pick-label">{{ pad3(pictureSequences()[0][si]) }}</span>
+                    </button>
+                  </div>
                 </div>
-              </div>
+              </ng-container>
+              <ng-template #picturePerTrialRows>
+                <div class="seq-row" *ngFor="let _ of [].constructor(trials()); let ti = index">
+                  <div class="cell trial">{{ ti + 1 }}</div>
+                  <div class="cell" *ngFor="let __ of [].constructor(stepsNum()); let si = index">
+                    <button class="pick pick-visual" type="button" (click)="openPicPicker(ti, si)">
+                      <img
+                        class="pick-thumb"
+                        [src]="'assets/pics/' + pad3(pictureSequences()[ti][si]) + '.jpg'"
+                        alt=""
+                        loading="lazy"
+                      />
+                      <span class="pick-label">{{ pad3(pictureSequences()[ti][si]) }}</span>
+                    </button>
+                  </div>
+                </div>
+              </ng-template>
             </div>
           </div>
 
@@ -95,7 +142,13 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
             <div class="picker" (click)="$event.stopPropagation()">
               <div class="picker-top">
                 <div class="picker-title">
-                  Pick picture — Trial {{ picPickerTrial() + 1 }}, Step {{ picPickerStep() + 1 }}
+                  Pick picture —
+                  {{
+                    sameSequenceForAllTrials()
+                      ? 'All trials'
+                      : 'Trial ' + (picPickerTrial() + 1)
+                  }},
+                  Step {{ picPickerStep() + 1 }}
                 </div>
                 <button class="btn ghost" type="button" (click)="closePicPicker()">Close</button>
               </div>
@@ -115,24 +168,59 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
           </div>
 
           <div class="seq-editor" *ngIf="taskType() === TaskType.Location">
-            <h2>Location sequence (one row per trial)</h2>
-            <p class="muted small">Pick a grid cell (1–16) for each step. StepsNum controls how many picks per trial.</p>
+            <div class="seq-editor-head">
+              <div>
+                <h2>Location sequence</h2>
+                <p class="muted small">Pick a grid cell (1–16) for each step. StepsNum controls how many picks per trial.</p>
+              </div>
+              <div class="seq-tools">
+                <label class="seq-toggle">
+                  <input
+                    type="checkbox"
+                    [checked]="sameSequenceForAllTrials()"
+                    (change)="setSameSequenceForAllTrials($any($event.target).checked)"
+                  />
+                  <span>Same sequence for all trials</span>
+                </label>
+                <button
+                  type="button"
+                  class="btn ghost seq-apply"
+                  [disabled]="trials() <= 1"
+                  (click)="applySequenceToAllTrials()"
+                >
+                  Apply trial 1 to all
+                </button>
+              </div>
+            </div>
 
             <div class="seq-table">
               <div class="seq-row header">
-                <div class="cell h">Trial</div>
+                <div class="cell h">{{ sameSequenceForAllTrials() ? 'All trials' : 'Trial' }}</div>
                 <div class="cell h" *ngFor="let _ of [].constructor(stepsNum()); let si = index">Step {{ si + 1 }}</div>
               </div>
 
-              <div class="seq-row" *ngFor="let _ of [].constructor(trials()); let ti = index">
-                <div class="cell trial">{{ ti + 1 }}</div>
-                <div class="cell" *ngFor="let __ of [].constructor(stepsNum()); let si = index">
-                  <button class="pick pick-loc" type="button" (click)="openLocPicker(ti, si)">
-                    <span class="loc-pill">{{ locationSequences()[ti][si] }}</span>
-                    <span class="pick-label">Cell</span>
-                  </button>
+              <ng-container *ngIf="sameSequenceForAllTrials(); else locationPerTrialRows">
+                <div class="seq-row">
+                  <div class="cell trial synced">★</div>
+                  <div class="cell" *ngFor="let __ of [].constructor(stepsNum()); let si = index">
+                    <button class="pick pick-loc" type="button" (click)="openLocPicker(0, si)">
+                      <span class="loc-pill">{{ locationSequences()[0][si] }}</span>
+                      <span class="pick-label">Cell</span>
+                    </button>
+                  </div>
                 </div>
-              </div>
+              </ng-container>
+              <ng-template #locationPerTrialRows>
+                <div class="seq-row" *ngFor="let _ of [].constructor(trials()); let ti = index">
+                  <div class="cell trial">{{ ti + 1 }}</div>
+                  <div class="cell" *ngFor="let __ of [].constructor(stepsNum()); let si = index">
+                    <button class="pick pick-loc" type="button" (click)="openLocPicker(ti, si)">
+                      <span class="loc-pill">{{ locationSequences()[ti][si] }}</span>
+                      <span class="pick-label">Cell</span>
+                    </button>
+                  </div>
+                </div>
+              </ng-template>
             </div>
           </div>
 
@@ -141,7 +229,13 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
             <div class="picker" (click)="$event.stopPropagation()">
               <div class="picker-top">
                 <div class="picker-title">
-                  Pick location — Trial {{ locPickerTrial() + 1 }}, Step {{ locPickerStep() + 1 }}
+                  Pick location —
+                  {{
+                    sameSequenceForAllTrials()
+                      ? 'All trials'
+                      : 'Trial ' + (locPickerTrial() + 1)
+                  }},
+                  Step {{ locPickerStep() + 1 }}
                 </div>
                 <button class="btn ghost" type="button" (click)="closeLocPicker()">Close</button>
               </div>
@@ -331,6 +425,8 @@ export class AppComponent {
   readonly stepsNum = signal(2);
   readonly distractorsN = signal(1);
   readonly studySeconds = signal(5);
+  /** When true, one sequence row applies to every trial (trial 1 is the master). */
+  readonly sameSequenceForAllTrials = signal(false);
 
   // Runtime
   readonly trialIndex = signal(0);
@@ -458,19 +554,54 @@ export class AppComponent {
       const t = Math.max(1, Math.min(50, this.trials()));
       const steps = Math.max(1, Math.min(5, this.stepsNum()));
       const task = this.taskType();
+      const syncAll = untracked(() => this.sameSequenceForAllTrials());
       if (task === this.TaskType.Picture) {
         const cur = untracked(() => this.pictureSequences());
-        this.pictureSequences.set(this._normalizeSequences(cur, t, steps, 1, 99));
+        let next = this._normalizeSequences(cur, t, steps, 1, 99);
+        if (syncAll) next = this._syncAllTrialsToMaster(next);
+        this.pictureSequences.set(next);
       } else {
         const cur = untracked(() => this.locationSequences());
-        this.locationSequences.set(this._normalizeSequences(cur, t, steps, 1, 16));
+        let next = this._normalizeSequences(cur, t, steps, 1, 16);
+        if (syncAll) next = this._syncAllTrialsToMaster(next);
+        this.locationSequences.set(next);
       }
     });
   }
 
   goSetup(type: 'location' | 'picture') {
     this.taskType.set(type);
+    this.sameSequenceForAllTrials.set(false);
     this.screen.set('setup');
+  }
+
+  setSameSequenceForAllTrials(on: boolean) {
+    this.sameSequenceForAllTrials.set(on);
+    if (on) this.applySequenceToAllTrials();
+  }
+
+  applySequenceToAllTrials() {
+    if (this.taskType() === this.TaskType.Picture) {
+      const t = Math.max(1, this.trials());
+      const steps = Math.max(1, this.stepsNum());
+      const next = this._syncAllTrialsToMaster(
+        this._normalizeSequences(this.pictureSequences(), t, steps, 1, 99),
+      );
+      this.pictureSequences.set(next);
+    } else {
+      const t = Math.max(1, this.trials());
+      const steps = Math.max(1, this.stepsNum());
+      const next = this._syncAllTrialsToMaster(
+        this._normalizeSequences(this.locationSequences(), t, steps, 1, 16),
+      );
+      this.locationSequences.set(next);
+    }
+  }
+
+  private _syncAllTrialsToMaster(seqs: number[][]) {
+    if (!seqs.length) return seqs;
+    const master = [...seqs[0]];
+    return seqs.map(() => [...master]);
   }
 
   start() {
@@ -713,14 +844,15 @@ export class AppComponent {
     const pic = Math.max(1, Math.min(99, Number(value) || 1));
     const t = Math.max(1, this.trials());
     const steps = Math.max(1, this.stepsNum());
-    const next = this._normalizeSequences(this.pictureSequences(), t, steps, 1, 99).map((row) => [...row]);
+    let next = this._normalizeSequences(this.pictureSequences(), t, steps, 1, 99).map((row) => [...row]);
     if (!next[trialIdx]) return;
     next[trialIdx][stepIdx] = pic;
+    if (this.sameSequenceForAllTrials()) next = this._syncAllTrialsToMaster(next);
     this.pictureSequences.set(next);
   }
 
   openPicPicker(trialIdx: number, stepIdx: number) {
-    this.picPickerTrial.set(trialIdx);
+    this.picPickerTrial.set(this.sameSequenceForAllTrials() ? 0 : trialIdx);
     this.picPickerStep.set(stepIdx);
     this.picPickerOpen.set(true);
   }
@@ -745,7 +877,7 @@ export class AppComponent {
   }
 
   openLocPicker(trialIdx: number, stepIdx: number) {
-    this.locPickerTrial.set(trialIdx);
+    this.locPickerTrial.set(this.sameSequenceForAllTrials() ? 0 : trialIdx);
     this.locPickerStep.set(stepIdx);
     this.locPickerOpen.set(true);
   }
@@ -773,9 +905,10 @@ export class AppComponent {
     const cell = Math.max(1, Math.min(16, Number(value) || 1));
     const t = Math.max(1, this.trials());
     const steps = Math.max(1, this.stepsNum());
-    const next = this._normalizeSequences(this.locationSequences(), t, steps, 1, 16).map((row) => [...row]);
+    let next = this._normalizeSequences(this.locationSequences(), t, steps, 1, 16).map((row) => [...row]);
     if (!next[trialIdx]) return;
     next[trialIdx][stepIdx] = cell;
+    if (this.sameSequenceForAllTrials()) next = this._syncAllTrialsToMaster(next);
     this.locationSequences.set(next);
   }
 

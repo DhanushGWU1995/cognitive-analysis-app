@@ -585,10 +585,63 @@ input {
   border-top: 1px dashed rgba(15, 23, 42, 0.14);
 }
 
-.seq-editor h2 {
+.seq-editor-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 10px;
+}
+
+.seq-editor-head h2 {
   margin: 0 0 6px;
   font-size: 16px;
   font-weight: 900;
+}
+
+.seq-editor-head .muted {
+  margin: 0;
+}
+
+.seq-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.seq-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(79, 70, 229, 0.22);
+  background: rgba(99, 102, 241, 0.08);
+  font-size: 13px;
+  font-weight: 800;
+  color: rgba(15, 23, 42, 0.88);
+  cursor: pointer;
+  user-select: none;
+}
+
+.seq-toggle input {
+  width: 16px;
+  height: 16px;
+  accent-color: #4f46e5;
+  cursor: pointer;
+}
+
+.seq-apply {
+  height: 38px;
+  white-space: nowrap;
+}
+
+.cell.trial.synced {
+  background: linear-gradient(135deg, rgba(255, 215, 0, 0.35) 0%, rgba(99, 102, 241, 0.18) 100%);
+  color: #4338ca;
+  font-size: 18px;
 }
 
 .small {

@@ -292,35 +292,26 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
             </div>
           </div>
 
-          <div class="grid4" *ngIf="taskType() === TaskType.Location">
+          <div class="grid4">
             <button
               class="cell"
-              *ngFor="let cell of [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]"
-              [class.active]="phase() === 'study' && isLocationCellActive(cell)"
-              [class.pressed]="isChoiceSelected(cell)"
-              [class.dim]="phase() === 'test' && !testChoices().includes(cell)"
-              [disabled]="phase() === 'test' ? !testChoices().includes(cell) : true"
-              (click)="onPick(cell)"
+              *ngFor="let cell of gridCells"
+              [class.active]="isGridCellActive(cell)"
+              [class.pressed]="isGridCellPressed(cell)"
+              [class.dim]="isGridCellDim(cell)"
+              [disabled]="isGridCellDisabled(cell)"
+              (click)="onGridCellClick(cell)"
             >
-              <div class="step-overlay" *ngIf="phase() === 'test' && !showCongrats() && pressedBadges()[cell] as n">
+              <div class="step-overlay" *ngIf="phase() === 'test' && !showCongrats() && gridStepBadge(cell) as n">
                 <div class="step-overlay-cluster" aria-hidden="true">
                   <span class="step-num">{{ n }}</span>
                   <span class="step-face">😊</span>
                 </div>
               </div>
-              <!-- Study: show ONLY the active cell picture (clearer). Test: show only choice cells. -->
-              <ng-container *ngIf="(phase() === 'study' && isLocationCellActive(cell)) || (phase() === 'test' && testChoices().includes(cell)); else emptyCell">
+              <ng-container *ngIf="showImageInGridCell(cell); else emptyCell">
                 <img
                   class="pic"
-                  [src]="
-                    'assets/pics/' +
-                    pad3(
-                      phase() === 'study'
-                        ? locStudyPicId()
-                        : (locTestPics()[cell] ?? 1)
-                    ) +
-                    '.jpg'
-                  "
+                  [src]="'assets/pics/' + pad3(picIdInGridCell(cell)) + '.jpg'"
                   alt=""
                   draggable="false"
                   loading="lazy"
@@ -330,29 +321,6 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
                 <div class="cell-empty" aria-hidden="true"></div>
               </ng-template>
             </button>
-          </div>
-
-          <div class="choices" *ngIf="taskType() === TaskType.Picture">
-            <button class="choice study" *ngIf="phase() === 'study'" disabled>
-              <img class="pic big" [src]="'assets/pics/' + pad3(currentSequence()[stepIndex()]) + '.jpg'" alt="" />
-            </button>
-
-            <div class="choice-grid" *ngIf="phase() === 'test'">
-              <button
-                class="choice"
-                *ngFor="let p of testChoices()"
-                (click)="onPick(p)"
-                [class.pressed]="isChoiceSelected(p)"
-              >
-                <div class="step-overlay" *ngIf="!showCongrats() && pressedBadgesPic()[p] as n">
-                  <div class="step-overlay-cluster" aria-hidden="true">
-                    <span class="step-num">{{ n }}</span>
-                    <span class="step-face">😊</span>
-                  </div>
-                </div>
-                <img class="pic" [src]="'assets/pics/' + pad3(p) + '.jpg'" alt="" loading="lazy" />
-              </button>
-            </div>
           </div>
 
           <div class="feedback" *ngIf="feedback()">
@@ -440,6 +408,12 @@ export class AppComponent {
   // Location task: pictures are just visual tokens (identity irrelevant)
   readonly locStudyPicId = signal(1);
   readonly locTestPics = signal<Record<number, number>>({});
+  /** Picture task: random grid cell per study step (1–16). */
+  readonly picStudyCellByStep = signal<number[]>([]);
+  /** Picture task: test phase cell -> picture id. */
+  readonly picTestCellToPic = signal<Record<number, number>>({});
+
+  readonly gridCells = Array.from({ length: 16 }, (_, i) => i + 1);
 
   // A tiny built-in demo sequence plan (one line per trial)
   readonly locationSequences = signal<number[][]>([
@@ -616,6 +590,9 @@ export class AppComponent {
     this.feedback.set(null);
     this.showCongrats.set(false);
     this.locTestPics.set({});
+    this.picTestCellToPic.set({});
+    if (this.taskType() === this.TaskType.Picture) this._buildPicStudyLayout();
+    else this.picStudyCellByStep.set([]);
     this.trialStartedAt = performance.now();
     this.screen.set('run');
     this._runStudyTick();
@@ -674,6 +651,8 @@ export class AppComponent {
         }
       }
       this.locTestPics.set(mapping);
+    } else if (this.taskType() === this.TaskType.Picture) {
+      this._buildPicTestLayout();
     }
     this._stopTimer();
   }
@@ -737,6 +716,8 @@ export class AppComponent {
     this.pressedOrder.set([]);
     this.feedback.set(null);
     this.locTestPics.set({});
+    this.picTestCellToPic.set({});
+    if (this.taskType() === this.TaskType.Picture) this._buildPicStudyLayout();
     this.trialStartedAt = performance.now();
     this._runStudyTick();
   }
@@ -810,18 +791,124 @@ export class AppComponent {
     this.activeAudio = [];
   }
 
-  // UI helpers
-  isLocationCellActive(cell: number) {
-    if (this.taskType() !== this.TaskType.Location) return false;
-    const seq = this.currentSequence();
-    if (this.phase() === 'study') return seq[this.stepIndex()] === cell;
+  // UI helpers — shared 4×4 grid (location + picture run screen)
+  onGridCellClick(cell: number) {
+    if (this.taskType() === this.TaskType.Location) {
+      this.onPick(cell);
+      return;
+    }
+    const picId = this.picTestCellToPic()[cell];
+    if (picId != null) this.onPick(picId);
+  }
+
+  isGridCellActive(cell: number) {
+    if (this.phase() !== 'study') return false;
+    if (this.taskType() === this.TaskType.Location) {
+      return this.currentSequence()[this.stepIndex()] === cell;
+    }
+    return (this.picStudyCellByStep()[this.stepIndex()] ?? -1) === cell;
+  }
+
+  isGridCellDisabled(cell: number) {
+    if (this.phase() === 'study') return true;
+    if (this.taskType() === this.TaskType.Location) {
+      return !this.testChoices().includes(cell);
+    }
+    return this.picTestCellToPic()[cell] == null;
+  }
+
+  isGridCellDim(cell: number) {
     if (this.phase() !== 'test') return false;
-    // During test, do not auto-highlight the correct answer.
-    return false;
+    if (this.taskType() === this.TaskType.Location) {
+      return !this.testChoices().includes(cell);
+    }
+    return this.picTestCellToPic()[cell] == null;
+  }
+
+  isGridCellPressed(cell: number) {
+    if (this.taskType() === this.TaskType.Location) {
+      return this.isChoiceSelected(cell);
+    }
+    const picId = this.picTestCellToPic()[cell];
+    return picId != null && this.isChoiceSelected(picId);
+  }
+
+  gridStepBadge(cell: number): number | null {
+    if (this.phase() !== 'test') return null;
+    if (this.taskType() === this.TaskType.Location) {
+      return this.pressedBadges()[cell] ?? null;
+    }
+    const picId = this.picTestCellToPic()[cell];
+    if (picId == null) return null;
+    return this.pressedBadgesPic()[picId] ?? null;
+  }
+
+  showImageInGridCell(cell: number) {
+    if (this.taskType() === this.TaskType.Location) {
+      return (
+        (this.phase() === 'study' && this.isGridCellActive(cell)) ||
+        (this.phase() === 'test' && this.testChoices().includes(cell))
+      );
+    }
+    if (this.phase() === 'study') return this.isGridCellActive(cell);
+    return this.picTestCellToPic()[cell] != null;
+  }
+
+  picIdInGridCell(cell: number) {
+    if (this.taskType() === this.TaskType.Location) {
+      if (this.phase() === 'study') return this.locStudyPicId();
+      return this.locTestPics()[cell] ?? 1;
+    }
+    if (this.phase() === 'study') {
+      return this.currentSequence()[this.stepIndex()] ?? 1;
+    }
+    return this.picTestCellToPic()[cell] ?? 1;
   }
 
   isChoiceSelected(choice: number) {
     return this.pressed().includes(choice);
+  }
+
+  private _buildPicStudyLayout() {
+    const steps = this.currentSequence().length;
+    this.picStudyCellByStep.set(this._pickRandomGridCells(steps, false));
+  }
+
+  private _buildPicTestLayout() {
+    const pics = this._testPictureIds();
+    const cells = this._pickRandomGridCells(pics.length, true);
+    const map: Record<number, number> = {};
+    pics.forEach((pid, i) => {
+      map[cells[i]] = pid;
+    });
+    this.picTestCellToPic.set(map);
+  }
+
+  private _testPictureIds() {
+    const seq = this.currentSequence();
+    const n = Math.max(0, Math.min(12, this.distractorsN()));
+    const base = [...new Set(seq)];
+    const out = [...base];
+    while (out.length < base.length + n) {
+      const r = 1 + Math.floor(Math.random() * 99);
+      if (!out.includes(r)) out.push(r);
+    }
+    return out;
+  }
+
+  /** Random cells 1–16; distinct=true requires unique cells (for test choices). */
+  private _pickRandomGridCells(count: number, distinct: boolean) {
+    const n = Math.max(0, Math.min(16, count));
+    if (n === 0) return [];
+    if (distinct) {
+      const pool = Array.from({ length: 16 }, (_, i) => i + 1);
+      for (let i = pool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [pool[i], pool[j]] = [pool[j], pool[i]];
+      }
+      return pool.slice(0, n);
+    }
+    return Array.from({ length: n }, () => 1 + Math.floor(Math.random() * 16));
   }
 
   pad3(n: number) {

@@ -591,7 +591,9 @@ export class AppComponent {
     this._stopTimer();
     this.stepIndex.set(0);
     this.phase.set('study');
-    if (this.taskType() === this.TaskType.Picture) {
+    if (this.taskType() === this.TaskType.Location) {
+      this._buildLocStudyPics();
+    } else if (this.taskType() === this.TaskType.Picture) {
       this._buildPicStudyLayout();
     }
     this._runStudyTick();

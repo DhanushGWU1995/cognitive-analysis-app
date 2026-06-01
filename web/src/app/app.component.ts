@@ -272,18 +272,27 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
               }}
             </div>
             <div class="meta" *ngIf="phase() === 'study'">
-              {{ taskType() === TaskType.Location ? 'Place' : 'Picture' }} {{ stepIndex() + 1 }} of {{ currentSequence().length }} ·
+              {{ taskType() === TaskType.Location ? 'Place' : 'Picture' }} {{ stepIndex() + 1 }} of {{ trialSequence().length }} ·
               <span class="countdown">{{ countdown() }}</span>
+            </div>
+
+            <div class="study-ready" *ngIf="phase() === 'studyReady'">
+              <div class="title">Study complete</div>
+              <p class="subtitle">The sequence was shown once. Continue to test, or show it again if needed.</p>
+              <div class="study-ready-actions">
+                <button type="button" class="btn ghost" (click)="replayStudy()">Show study again</button>
+                <button type="button" class="btn primary" (click)="continueToTest()">Continue to test</button>
+              </div>
             </div>
 
             <div class="title" *ngIf="phase() === 'test'">
               {{ taskType() === TaskType.Location ? 'Touch each place in order!' : 'Touch each picture in order!' }}
             </div>
-            <div class="subtitle" *ngIf="phase() === 'test'">Step {{ pressed().length + 1 }} of {{ currentSequence().length }}</div>
+            <div class="subtitle" *ngIf="phase() === 'test'">Step {{ pressed().length + 1 }} of {{ trialSequence().length }}</div>
             <div class="step-progress" *ngIf="phase() === 'test' && !showCongrats()">
               <div
                 class="step-badge"
-                *ngFor="let _ of [].constructor(currentSequence().length); let i = index"
+                *ngFor="let _ of [].constructor(trialSequence().length); let i = index"
                 [class.done]="i < pressed().length"
               >
                 <span class="num">{{ i + 1 }}</span>
@@ -398,7 +407,11 @@ export class AppComponent {
 
   // Runtime
   readonly trialIndex = signal(0);
-  readonly phase = signal<'study' | 'test' | 'done'>('study');
+  readonly phase = signal<'study' | 'studyReady' | 'test' | 'done'>('study');
+  /** Frozen target sequence for the active trial (prevents order drift mid-trial). */
+  readonly trialSequence = signal<number[]>([]);
+  /** Location test: which cells are visible this trial (set once when test starts). */
+  readonly trialTestCells = signal<number[]>([]);
   readonly stepIndex = signal(0); // within-trial sequence step
   readonly countdown = signal(0);
   readonly pressed = signal<number[]>([]);
@@ -460,33 +473,8 @@ export class AppComponent {
   readonly locPickerTrial = signal(0);
   readonly locPickerStep = signal(0);
 
-  readonly currentSequence = computed(() => {
-    const t = this.trialIndex();
-    const seqs = this.taskType() === this.TaskType.Location ? this.locationSequences() : this.pictureSequences();
-    const seq = seqs[Math.min(t, seqs.length - 1)] ?? [];
-    return (seq.length ? seq : [1]).slice(0, Math.max(1, this.stepsNum()));
-  });
-
-  readonly testChoices = computed(() => {
-    const seq = this.currentSequence();
-    const n = Math.max(0, Math.min(12, this.distractorsN()));
-    const poolMax = this.taskType() === this.TaskType.Location ? 16 : 30;
-    const base = [...new Set(seq)];
-    const out = [...base];
-    while (out.length < base.length + n) {
-      const r = 1 + Math.floor(Math.random() * poolMax);
-      if (!out.includes(r)) out.push(r);
-    }
-    // Shuffle on-screen positions every render
-    for (let i = out.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [out[i], out[j]] = [out[j], out[i]];
-    }
-    return out;
-  });
-
   readonly expectedNext = computed(() => {
-    const seq = this.currentSequence();
+    const seq = this.trialSequence();
     const k = Math.min(this.pressed().length, seq.length - 1);
     return seq[k];
   });
@@ -522,13 +510,13 @@ export class AppComponent {
       }
     });
 
-    // Keep per-trial sequence arrays in sync with Trials + StepsNum.
+    // Keep per-trial sequence arrays in sync with Trials + StepsNum (setup only).
     effect(() => {
-      // reading signals establishes deps
+      if (this.screen() !== 'setup') return;
       const t = Math.max(1, Math.min(50, this.trials()));
       const steps = Math.max(1, Math.min(5, this.stepsNum()));
       const task = this.taskType();
-      const syncAll = untracked(() => this.sameSequenceForAllTrials());
+      const syncAll = this.sameSequenceForAllTrials();
       if (task === this.TaskType.Picture) {
         const cur = untracked(() => this.pictureSequences());
         let next = this._normalizeSequences(cur, t, steps, 1, 99);
@@ -591,11 +579,72 @@ export class AppComponent {
     this.showCongrats.set(false);
     this.locTestPics.set({});
     this.picTestCellToPic.set({});
-    if (this.taskType() === this.TaskType.Picture) this._buildPicStudyLayout();
-    else this.picStudyCellByStep.set([]);
+    this.trialTestCells.set([]);
+    this._beginTrial();
     this.trialStartedAt = performance.now();
     this.screen.set('run');
     this._runStudyTick();
+  }
+
+  replayStudy() {
+    if (this.phase() !== 'studyReady') return;
+    this._stopTimer();
+    this.stepIndex.set(0);
+    this.phase.set('study');
+    if (this.taskType() === this.TaskType.Location) {
+      this.locStudyPicId.set(this._randPic());
+    }
+    if (this.taskType() === this.TaskType.Picture) {
+      this._buildPicStudyLayout();
+    }
+    this._runStudyTick();
+  }
+
+  continueToTest() {
+    if (this.phase() !== 'studyReady') return;
+    this._enterTestPhase();
+  }
+
+  private _beginTrial() {
+    const t = this.trialIndex();
+    const seqs =
+      this.taskType() === this.TaskType.Location ? this.locationSequences() : this.pictureSequences();
+    const row = seqs[Math.min(t, seqs.length - 1)] ?? [];
+    const seq = (row.length ? row : [1]).slice(0, Math.max(1, this.stepsNum()));
+    this.trialSequence.set([...seq]);
+    this.picTestCellToPic.set({});
+    this.trialTestCells.set([]);
+    if (this.taskType() === this.TaskType.Picture) {
+      this._buildPicStudyLayout();
+    } else {
+      this.picStudyCellByStep.set([]);
+    }
+  }
+
+  private _enterTestPhase() {
+    this.phase.set('test');
+    this.stepIndex.set(0);
+    this.pressed.set([]);
+    this.pressedOrder.set([]);
+    this.feedback.set(null);
+    if (this.taskType() === this.TaskType.Location) {
+      const choices = this._buildLocationTestCells();
+      this.trialTestCells.set(choices);
+      const mapping: Record<number, number> = {};
+      const studyPic = this.locStudyPicId();
+      const targets = new Set(this.trialSequence());
+      for (const cell of choices) {
+        if (targets.has(cell)) {
+          mapping[cell] = this._randPic(new Set([studyPic]));
+        } else {
+          mapping[cell] = this._randPic();
+        }
+      }
+      this.locTestPics.set(mapping);
+    } else {
+      this._buildPicTestLayout();
+    }
+    this._stopTimer();
   }
 
   private _runStudyTick() {
@@ -623,38 +672,15 @@ export class AppComponent {
 
   private _advanceStudyOrTest() {
     const step = this.stepIndex();
-    const seq = this.currentSequence();
+    const seq = this.trialSequence();
     if (step + 1 < seq.length) {
       this.stepIndex.set(step + 1);
       this._runStudyTick();
       return;
     }
-    // Move to test
-    this.phase.set('test');
-    this.stepIndex.set(0);
-    this.pressed.set([]);
-    this.pressedOrder.set([]);
-    this.feedback.set(null);
-    if (this.taskType() === this.TaskType.Location) {
-      // Assign random pictures to each visible location cell for this trial's test phase.
-      const choices = this.testChoices();
-      const mapping: Record<number, number> = {};
-      const studyPic = this.locStudyPicId();
-      const targets = new Set(this.currentSequence());
-      for (const cell of choices) {
-        if (targets.has(cell)) {
-          // Ensure targets do not use the same picture as the study phase.
-          mapping[cell] = this._randPic(new Set([studyPic]));
-        } else {
-          // Distractors may (or may not) match the study picture; allow it naturally.
-          mapping[cell] = this._randPic();
-        }
-      }
-      this.locTestPics.set(mapping);
-    } else if (this.taskType() === this.TaskType.Picture) {
-      this._buildPicTestLayout();
-    }
     this._stopTimer();
+    this.phase.set('studyReady');
+    this.stepIndex.set(0);
   }
 
   onPick(choice: number) {
@@ -678,15 +704,16 @@ export class AppComponent {
     const next = [...presses, choice];
     this.pressed.set(next);
     this.pressedOrder.set([...this.pressedOrder(), { cell: choice, step: next.length }]);
-    if (next.length >= this.currentSequence().length) {
+    if (next.length >= this.trialSequence().length) {
       const ms = Math.max(0, Math.round(performance.now() - this.trialStartedAt));
-      const correct = next.join(',') === this.currentSequence().join(',');
+      const seq = this.trialSequence();
+      const correct = next.join(',') === seq.join(',');
       this.results.set([
         ...this.results(),
         {
           trial: this.trialIndex() + 1,
           taskType: this.taskType(),
-          sequence: this.currentSequence(),
+          sequence: seq,
           presses: next,
           correct,
           ms,
@@ -716,8 +743,7 @@ export class AppComponent {
     this.pressedOrder.set([]);
     this.feedback.set(null);
     this.locTestPics.set({});
-    this.picTestCellToPic.set({});
-    if (this.taskType() === this.TaskType.Picture) this._buildPicStudyLayout();
+    this._beginTrial();
     this.trialStartedAt = performance.now();
     this._runStudyTick();
   }
@@ -804,15 +830,15 @@ export class AppComponent {
   isGridCellActive(cell: number) {
     if (this.phase() !== 'study') return false;
     if (this.taskType() === this.TaskType.Location) {
-      return this.currentSequence()[this.stepIndex()] === cell;
+      return this.trialSequence()[this.stepIndex()] === cell;
     }
     return (this.picStudyCellByStep()[this.stepIndex()] ?? -1) === cell;
   }
 
   isGridCellDisabled(cell: number) {
-    if (this.phase() === 'study') return true;
+    if (this.phase() !== 'test') return true;
     if (this.taskType() === this.TaskType.Location) {
-      return !this.testChoices().includes(cell);
+      return !this.trialTestCells().includes(cell);
     }
     return this.picTestCellToPic()[cell] == null;
   }
@@ -820,7 +846,7 @@ export class AppComponent {
   isGridCellDim(cell: number) {
     if (this.phase() !== 'test') return false;
     if (this.taskType() === this.TaskType.Location) {
-      return !this.testChoices().includes(cell);
+      return !this.trialTestCells().includes(cell);
     }
     return this.picTestCellToPic()[cell] == null;
   }
@@ -844,10 +870,11 @@ export class AppComponent {
   }
 
   showImageInGridCell(cell: number) {
+    if (this.phase() === 'studyReady') return false;
     if (this.taskType() === this.TaskType.Location) {
       return (
         (this.phase() === 'study' && this.isGridCellActive(cell)) ||
-        (this.phase() === 'test' && this.testChoices().includes(cell))
+        (this.phase() === 'test' && this.trialTestCells().includes(cell))
       );
     }
     if (this.phase() === 'study') return this.isGridCellActive(cell);
@@ -860,7 +887,7 @@ export class AppComponent {
       return this.locTestPics()[cell] ?? 1;
     }
     if (this.phase() === 'study') {
-      return this.currentSequence()[this.stepIndex()] ?? 1;
+      return this.trialSequence()[this.stepIndex()] ?? 1;
     }
     return this.picTestCellToPic()[cell] ?? 1;
   }
@@ -870,8 +897,27 @@ export class AppComponent {
   }
 
   private _buildPicStudyLayout() {
-    const steps = this.currentSequence().length;
+    const steps = this.trialSequence().length;
     this.picStudyCellByStep.set(this._pickRandomGridCells(steps, false));
+  }
+
+  private _buildLocationTestCells() {
+    const seq = this.trialSequence();
+    const n = Math.max(0, Math.min(12, this.distractorsN()));
+    const targets: number[] = [];
+    const seen = new Set<number>();
+    for (const cell of seq) {
+      if (!seen.has(cell)) {
+        seen.add(cell);
+        targets.push(cell);
+      }
+    }
+    const out = [...targets];
+    while (out.length < targets.length + n) {
+      const r = 1 + Math.floor(Math.random() * 16);
+      if (!out.includes(r)) out.push(r);
+    }
+    return out;
   }
 
   private _buildPicTestLayout() {
@@ -885,11 +931,18 @@ export class AppComponent {
   }
 
   private _testPictureIds() {
-    const seq = this.currentSequence();
+    const seq = this.trialSequence();
     const n = Math.max(0, Math.min(12, this.distractorsN()));
-    const base = [...new Set(seq)];
-    const out = [...base];
-    while (out.length < base.length + n) {
+    const targets: number[] = [];
+    const seen = new Set<number>();
+    for (const id of seq) {
+      if (!seen.has(id)) {
+        seen.add(id);
+        targets.push(id);
+      }
+    }
+    const out = [...targets];
+    while (out.length < targets.length + n) {
       const r = 1 + Math.floor(Math.random() * 99);
       if (!out.includes(r)) out.push(r);
     }

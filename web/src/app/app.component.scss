@@ -228,6 +228,26 @@ input {
   font-size: 13px;
   color: rgba(15, 23, 42, 0.8);
 }
+
+.study-ready {
+  text-align: center;
+  padding: 8px 12px 16px;
+}
+
+.study-ready .subtitle {
+  margin: 8px auto 0;
+  max-width: 520px;
+  font-size: 15px;
+  color: rgba(15, 23, 42, 0.75);
+}
+
+.study-ready-actions {
+  margin-top: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+}
 .countdown {
   display: inline-block;
   min-width: 24px;

@@ -591,6 +591,9 @@ export class AppComponent {
     this._stopTimer();
     this.stepIndex.set(0);
     this.phase.set('study');
+    if (this.taskType() === this.TaskType.Location) {
+      this.locStudyPicId.set(this._randPic());
+    }
     if (this.taskType() === this.TaskType.Picture) {
       this._buildPicStudyLayout();
     }
@@ -615,7 +618,6 @@ export class AppComponent {
       this._buildPicStudyLayout();
     } else {
       this.picStudyCellByStep.set([]);
-      // Spatial task: one picture per trial — same image at every location (study + test).
       this.locStudyPicId.set(this._randPic());
     }
   }
@@ -629,10 +631,16 @@ export class AppComponent {
     if (this.taskType() === this.TaskType.Location) {
       const choices = this._buildLocationTestCells();
       this.trialTestCells.set(choices);
-      const trialPic = this.locStudyPicId();
       const mapping: Record<number, number> = {};
+      const studyPic = this.locStudyPicId();
+      const targets = new Set(this.trialSequence());
       for (const cell of choices) {
-        mapping[cell] = trialPic;
+        if (targets.has(cell)) {
+          // Target cells: different pictures (not the study image).
+          mapping[cell] = this._randPic(new Set([studyPic]));
+        } else {
+          mapping[cell] = this._randPic();
+        }
       }
       this.locTestPics.set(mapping);
     } else {

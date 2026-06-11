@@ -401,7 +401,9 @@ type TrialTouch = {
 
             <div class="study-ready" *ngIf="phase() === 'studyReady'">
               <div class="title">Study complete</div>
-              <p class="subtitle">Ready for trial 1? Continue to test, or watch the study sequence once more.</p>
+              <p class="subtitle">
+                Ready for trial {{ trialIndex() + 1 }}? Continue to test, or watch the study sequence once more.
+              </p>
               <div class="study-ready-actions">
                 <button type="button" class="btn ghost" (click)="replayStudy()">Show study again</button>
                 <button type="button" class="btn primary" (click)="continueToTest()">Continue to test</button>
@@ -498,7 +500,7 @@ type TrialTouch = {
           <button
             type="button"
             class="study-replay-fab"
-            *ngIf="phase() === 'test' && sessionStudyDone() && !showCongrats() && !automaticPlayback()"
+            *ngIf="phase() === 'test' && !showCongrats() && !automaticPlayback()"
             (click)="teacherReplayStudy()"
           >
             Show study again
@@ -604,8 +606,10 @@ export class AppComponent {
   readonly pressedOrder = signal<Array<{ cell: number; step: number }>>([]);
   readonly feedback = signal<'correct' | 'wrong' | null>(null);
   readonly showCongrats = signal(false);
-  /** True after trial-1 study finishes; later trials skip study. */
+  /** True after the teacher continues from study-ready into test for the current trial. */
   readonly sessionStudyDone = signal(false);
+  /** Teacher replayed study mid-test; return to test without resetting the trial. */
+  private studyReturnToTest = signal(false);
   /** Spatial task: varied filler picture per study step (location is what matters). */
   readonly locStudyPicByStep = signal<number[]>([]);
   readonly locTestPics = signal<Record<number, number>>({});
@@ -842,7 +846,8 @@ export class AppComponent {
   }
 
   teacherReplayStudy() {
-    if (this.phase() !== 'test' || !this.sessionStudyDone() || this.showCongrats()) return;
+    if (this.phase() !== 'test' || this.showCongrats()) return;
+    this.studyReturnToTest.set(true);
     this._startStudyPlayback();
   }
 
@@ -951,8 +956,9 @@ export class AppComponent {
     }
     this._stopTimer();
     this.stepIndex.set(0);
-    if (this.sessionStudyDone()) {
-      this._enterTestPhase();
+    if (this.studyReturnToTest()) {
+      this.studyReturnToTest.set(false);
+      this.phase.set('test');
       return;
     }
     this.phase.set('studyReady');
@@ -1224,9 +1230,11 @@ export class AppComponent {
     this.feedback.set(null);
     this.showCongrats.set(false);
     this._clearBorderFlashes();
+    this.sessionStudyDone.set(false);
+    this.studyReturnToTest.set(false);
     this._beginTrial();
     this.trialStartedAt = performance.now();
-    this._enterTestPhase();
+    this._runStudyTick();
   }
 
   private _formatTouchesForCsv(touches: TrialTouch[]) {

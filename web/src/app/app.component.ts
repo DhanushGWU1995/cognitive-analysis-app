@@ -408,7 +408,7 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
               class="cell"
               *ngFor="let cell of gridCells"
               [class.active]="feedbackBorder() && isGridCellActive(cell)"
-              [class.pressed]="feedbackBorder() && isGridCellPressed(cell)"
+              [class.border-flash]="feedbackBorder() && isCellBorderFlashing(cell)"
               [class.dim]="isGridCellDim(cell)"
               [disabled]="isGridCellDisabled(cell)"
               (click)="onGridCellClick(cell)"
@@ -603,9 +603,13 @@ export class AppComponent {
 
   private trialStartedAt = 0;
   private trialTapCount = 0;
+  private trialWrongCount = 0;
   private timer: number | null = null;
   private congratsTimer: number | null = null;
   private activeAudio: HTMLAudioElement[] = [];
+  private borderFlashTimers = new Map<number, number>();
+  /** Grid cells showing a short-lived border after a tap (clears after ~2s). */
+  readonly borderFlashCells = signal<Set<number>>(new Set());
 
   // Picture picker overlay (visual selection)
   readonly picPickerOpen = signal(false);
@@ -760,6 +764,7 @@ export class AppComponent {
     this.pressedOrder.set([]);
     this.feedback.set(null);
     this.showCongrats.set(false);
+    this._clearBorderFlashes();
     this.sessionStudyDone.set(false);
     this.locTestPics.set({});
     this.picTestCellToPic.set({});
@@ -845,6 +850,8 @@ export class AppComponent {
       this._buildPicTestLayout();
     }
     this.trialTapCount = 0;
+    this.trialWrongCount = 0;
+    this._clearBorderFlashes();
     this._stopTimer();
   }
 
@@ -885,25 +892,32 @@ export class AppComponent {
     this.phase.set('studyReady');
   }
 
-  onPick(choice: number) {
+  onPick(choice: number, tappedCell: number) {
     if (this.phase() !== 'test') return;
     if (this.testMode() === this.TestMode.FreeRecall) {
-      this._onPickFreeRecall(choice);
+      this._onPickFreeRecall(choice, tappedCell);
       return;
     }
 
+    const choiceId = Number(choice);
+    const expected = Number(this.expectedNext());
     const presses = this.pressed();
-    const expected = this.expectedNext();
 
     // Ignore repeats unless it is the next expected step (handles 13,13 sequences).
-    if (presses.includes(choice) && choice !== expected) return;
+    if (this._shouldIgnoreRepeatTap(choiceId, expected)) return;
 
     this.trialTapCount++;
     const isFirstTap = this.trialTapCount === 1;
-    const ok = choice === expected;
-    const giveFeedback = this._shouldGiveFeedback(ok, isFirstTap);
+    const ok = choiceId === expected;
+    const isFirstWrong = !ok && this.trialWrongCount === 0;
+    const giveFeedback = this._shouldGiveFeedback(ok, isFirstTap, isFirstWrong);
+
+    if (giveFeedback && this.feedbackBorder()) {
+      this._flashCellBorder(tappedCell);
+    }
 
     if (!ok && this.testMode() === this.TestMode.Standard) {
+      this.trialWrongCount++;
       if (giveFeedback) {
         this.feedback.set('wrong');
         this._play('wrong');
@@ -921,15 +935,17 @@ export class AppComponent {
     }
 
     if (!ok) {
+      this.trialWrongCount++;
       if (giveFeedback) {
         window.setTimeout(() => this.feedback.set(null), 450);
       }
       return;
     }
 
-    const next = [...presses, choice];
+    this.feedback.set(null);
+    const next = [...presses, choiceId];
     this.pressed.set(next);
-    this.pressedOrder.set([...this.pressedOrder(), { cell: choice, step: next.length }]);
+    this.pressedOrder.set([...this.pressedOrder(), { cell: choiceId, step: next.length }]);
     if (next.length >= this.trialSequence().length) {
       this._completeTrial(next);
     } else if (giveFeedback) {
@@ -937,15 +953,20 @@ export class AppComponent {
     }
   }
 
-  private _onPickFreeRecall(choice: number) {
+  private _onPickFreeRecall(choice: number, tappedCell: number) {
+    const choiceId = Number(choice);
     const presses = this.pressed();
-    const next = [...presses, choice];
+    const next = [...presses, choiceId];
     this.trialTapCount++;
     const isFirstTap = this.trialTapCount === 1;
-    const giveFeedback = this._shouldGiveFeedback(true, isFirstTap);
+    const giveFeedback = this._shouldGiveFeedback(true, isFirstTap, false);
+
+    if (giveFeedback && this.feedbackBorder()) {
+      this._flashCellBorder(tappedCell);
+    }
 
     this.pressed.set(next);
-    this.pressedOrder.set([...this.pressedOrder(), { cell: choice, step: next.length }]);
+    this.pressedOrder.set([...this.pressedOrder(), { cell: choiceId, step: next.length }]);
 
     if (giveFeedback) {
       this._play('neutral');
@@ -996,10 +1017,51 @@ export class AppComponent {
     this.trialTestCells.set([]);
   }
 
-  private _shouldGiveFeedback(isCorrect: boolean, isFirstTap: boolean) {
+  private _shouldGiveFeedback(isCorrect: boolean, isFirstTap: boolean, isFirstWrong: boolean) {
     if (this.feedbackEveryResponse()) return true;
-    if (!isCorrect && this.feedbackEveryError()) return true;
+    if (!isCorrect) return this.feedbackEveryError() || isFirstWrong;
     return isFirstTap;
+  }
+
+  /** Ignore re-tapping an already-used choice that is not the current expected step. */
+  private _shouldIgnoreRepeatTap(choice: number, expected: number): boolean {
+    if (choice === expected) return false;
+    const presses = this.pressed();
+    if (!presses.includes(choice)) return false;
+
+    if (this.taskType() === this.TaskType.Picture) {
+      const seq = this.trialSequence().map((id) => Number(id));
+      const timesUsed = presses.filter((p) => p === choice).length;
+      const timesRequiredByNow = seq.slice(0, presses.length + 1).filter((id) => id === choice).length;
+      return timesUsed >= timesRequiredByNow;
+    }
+
+    return true;
+  }
+
+  private _flashCellBorder(cell: number) {
+    const next = new Set(this.borderFlashCells());
+    next.add(cell);
+    this.borderFlashCells.set(next);
+
+    const existing = this.borderFlashTimers.get(cell);
+    if (existing != null) window.clearTimeout(existing);
+
+    const timerId = window.setTimeout(() => {
+      const updated = new Set(this.borderFlashCells());
+      updated.delete(cell);
+      this.borderFlashCells.set(updated);
+      this.borderFlashTimers.delete(cell);
+    }, 2000);
+    this.borderFlashTimers.set(cell, timerId);
+  }
+
+  private _clearBorderFlashes() {
+    for (const timerId of this.borderFlashTimers.values()) {
+      window.clearTimeout(timerId);
+    }
+    this.borderFlashTimers.clear();
+    this.borderFlashCells.set(new Set());
   }
 
   private _nextTrialOrDone() {
@@ -1014,6 +1076,8 @@ export class AppComponent {
     this.pressed.set([]);
     this.pressedOrder.set([]);
     this.feedback.set(null);
+    this.showCongrats.set(false);
+    this._clearBorderFlashes();
     this._beginTrial();
     this.trialStartedAt = performance.now();
     this._enterTestPhase();
@@ -1095,11 +1159,15 @@ export class AppComponent {
   // UI helpers — shared 4×4 grid (location + picture run screen)
   onGridCellClick(cell: number) {
     if (this.taskType() === this.TaskType.Location) {
-      this.onPick(cell);
+      this.onPick(cell, cell);
       return;
     }
     const picId = this.picTestCellToPic()[cell];
-    if (picId != null) this.onPick(picId);
+    if (picId != null) this.onPick(picId, cell);
+  }
+
+  isCellBorderFlashing(cell: number) {
+    return this.borderFlashCells().has(cell);
   }
 
   isGridCellActive(cell: number) {
@@ -1124,14 +1192,6 @@ export class AppComponent {
       return !this.trialTestCells().includes(cell);
     }
     return this.picTestCellToPic()[cell] == null;
-  }
-
-  isGridCellPressed(cell: number) {
-    if (this.taskType() === this.TaskType.Location) {
-      return this.isChoiceSelected(cell);
-    }
-    const picId = this.picTestCellToPic()[cell];
-    return picId != null && this.isChoiceSelected(picId);
   }
 
   gridStepBadge(cell: number): number | null {

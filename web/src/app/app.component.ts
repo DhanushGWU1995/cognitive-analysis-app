@@ -559,8 +559,8 @@ export class AppComponent {
   readonly showCongrats = signal(false);
   /** True after trial-1 study finishes; later trials skip study. */
   readonly sessionStudyDone = signal(false);
-  /** Spatial task: one identical filler picture for the whole trial (study + test). */
-  readonly locTrialPicId = signal(1);
+  /** Spatial task: varied filler picture per study step (location is what matters). */
+  readonly locStudyPicByStep = signal<number[]>([]);
   readonly locTestPics = signal<Record<number, number>>({});
   /** Picture task: random grid cell per study step (1–16). */
   readonly picStudyCellByStep = signal<number[]>([]);
@@ -791,7 +791,9 @@ export class AppComponent {
     this.stepIndex.set(0);
     this.phase.set('study');
     this.feedback.set(null);
-    if (this.taskType() === this.TaskType.Picture) {
+    if (this.isSpatialTask()) {
+      this._buildLocStudyPics();
+    } else if (this.taskType() === this.TaskType.Picture) {
       this._buildPicStudyLayout();
     }
     this._runStudyTick();
@@ -810,7 +812,7 @@ export class AppComponent {
       this._buildPicStudyLayout();
     } else {
       this.picStudyCellByStep.set([]);
-      this.locTrialPicId.set(this._randPic());
+      this._buildLocStudyPics();
     }
   }
 
@@ -823,10 +825,20 @@ export class AppComponent {
     if (this.taskType() === this.TaskType.Location) {
       const choices = this._buildLocationTestCells();
       this.trialTestCells.set(choices);
-      const trialPic = this.locTrialPicId();
       const mapping: Record<number, number> = {};
+      const seq = this.trialSequence();
+      const studyPics = this.locStudyPicByStep();
+      const targets = new Set(seq);
       for (const cell of choices) {
-        mapping[cell] = trialPic;
+        if (targets.has(cell)) {
+          const avoid = new Set<number>();
+          for (let si = 0; si < seq.length; si++) {
+            if (seq[si] === cell) avoid.add(studyPics[si] ?? 0);
+          }
+          mapping[cell] = this._randPic(avoid);
+        } else {
+          mapping[cell] = this._randPic();
+        }
       }
       this.locTestPics.set(mapping);
     } else {
@@ -1146,7 +1158,10 @@ export class AppComponent {
 
   picIdInGridCell(cell: number) {
     if (this.taskType() === this.TaskType.Location) {
-      return this.locTrialPicId();
+      if (this.phase() === 'study') {
+        return this.locStudyPicByStep()[this.stepIndex()] ?? 1;
+      }
+      return this.locTestPics()[cell] ?? 1;
     }
     if (this.phase() === 'study') {
       return this.trialSequence()[this.stepIndex()] ?? 1;
@@ -1156,6 +1171,15 @@ export class AppComponent {
 
   isChoiceSelected(choice: number) {
     return this.pressed().includes(choice);
+  }
+
+  private _buildLocStudyPics() {
+    const steps = this.trialSequence().length;
+    const pics: number[] = [];
+    for (let i = 0; i < steps; i++) {
+      pics.push(this._randPic(new Set(pics)));
+    }
+    this.locStudyPicByStep.set(pics);
   }
 
   private _buildPicStudyLayout() {

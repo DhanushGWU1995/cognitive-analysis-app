@@ -173,8 +173,8 @@ type TrialTouch = {
           <div class="automatic-demo">
             <h2>Automatic demonstration</h2>
             <p class="muted small">
-              On demo trials the computer highlights each correct step in order. The teacher says “Watch!” — the child
-              does not tap.
+              On demo trials the computer highlights each correct step in order (border always on — no sound). The
+              teacher says “Watch!” — the child does not tap.
             </p>
             <div class="flag-grid">
               <label class="flag">
@@ -453,8 +453,8 @@ type TrialTouch = {
             <button
               class="cell"
               *ngFor="let cell of gridCells"
-              [class.active]="feedbackBorder() && (isGridCellActive(cell) || isAutoHighlightCell(cell))"
-              [class.border-flash]="feedbackBorder() && isCellBorderFlashing(cell)"
+              [class.active]="showBorderHighlight() && (isGridCellActive(cell) || isAutoHighlightCell(cell))"
+              [class.border-flash]="showBorderHighlight() && isCellBorderFlashing(cell)"
               [class.dim]="isGridCellDim(cell)"
               [disabled]="isGridCellDisabled(cell)"
               (click)="onGridCellClick(cell)"
@@ -673,6 +673,9 @@ export class AppComponent {
   readonly isDemoTrial = computed(
     () => this.automaticDemo() && this.trialIndex() < Math.max(0, Math.min(this.trials(), this.demoTrials())),
   );
+
+  /** Border on for user setting, or always during automatic watch playback (no sound there). */
+  readonly showBorderHighlight = computed(() => this.feedbackBorder() || this.automaticPlayback());
 
   // Picture picker overlay (visual selection)
   readonly picPickerOpen = signal(false);
@@ -1117,9 +1120,7 @@ export class AppComponent {
       }
 
       this.autoHighlightCell.set(cell);
-      if (this.feedbackBorder()) {
-        this._flashCellBorder(cell);
-      }
+      this._flashCellBorder(cell);
 
       this._appendTouch({
         press: this.trialTouches().length + 1,

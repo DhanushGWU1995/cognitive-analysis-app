@@ -348,8 +348,10 @@ input {
   box-shadow: 0 0 0 8px rgba(255, 215, 0, 0.22);
 }
 
-.cell.pressed {
+.cell.border-flash {
   outline: 6px solid rgba(79, 70, 229, 0.85);
+  box-shadow: 0 0 0 8px rgba(79, 70, 229, 0.18);
+  transition: outline-color 300ms ease, box-shadow 300ms ease;
 }
 
 .pic {

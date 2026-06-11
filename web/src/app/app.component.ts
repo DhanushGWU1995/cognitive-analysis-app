@@ -173,7 +173,7 @@ type TrialTouch = {
           <div class="automatic-demo">
             <h2>Automatic demonstration</h2>
             <p class="muted small">
-              On demo trials the computer highlights each correct step in order (border always on — no sound). The
+              On demo trials the computer highlights each correct step in order (border and sound always on). The
               teacher says “Watch!” — the child does not tap.
             </p>
             <div class="flag-grid">
@@ -1121,6 +1121,7 @@ export class AppComponent {
 
       this.autoHighlightCell.set(cell);
       this._flashCellBorder(cell);
+      this._playAutomaticStepSound();
 
       this._appendTouch({
         press: this.trialTouches().length + 1,
@@ -1300,6 +1301,11 @@ export class AppComponent {
     this.showCongrats.set(true);
     if (this.congratsTimer != null) window.clearTimeout(this.congratsTimer);
     this.congratsTimer = window.setTimeout(() => this.showCongrats.set(false), 3200);
+  }
+
+  /** Neutral ding on each automatic watch step (independent of feedback toggles). */
+  private _playAutomaticStepSound() {
+    this._play('neutral');
   }
 
   private _play(name: 'correct' | 'wrong' | 'success' | 'neutral') {

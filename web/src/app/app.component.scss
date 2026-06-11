@@ -685,6 +685,28 @@ input {
   line-height: 1.35;
 }
 
+.automatic-demo {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.automatic-demo h2 {
+  margin: 0 0 6px;
+  font-size: 18px;
+}
+
+.automatic-demo .lbl {
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.automatic-demo input[type='number'] {
+  width: 100%;
+  max-width: 120px;
+}
+
 .feedback-flags {
   margin-top: 18px;
   padding: 14px 16px;

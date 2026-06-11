@@ -1,6 +1,17 @@
 import { CommonModule } from '@angular/common';
 import { Component, computed, effect, signal, untracked } from '@angular/core';
 
+type TrialTouch = {
+  press: number;
+  ms: number;
+  choice: number;
+  gridCell: number;
+  expected: number;
+  correct: boolean;
+  ignored: boolean;
+  automatic: boolean;
+};
+
 @Component({
   selector: 'app-root',
   imports: [CommonModule],
@@ -157,6 +168,35 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
               Turn off <b>Every response</b> for first tap only. Turn off <b>Every wrong tap</b> to show Try again
               only on the first mistake.
             </p>
+          </div>
+
+          <div class="automatic-demo">
+            <h2>Automatic demonstration</h2>
+            <p class="muted small">
+              On demo trials the computer highlights each correct step in order. The teacher says “Watch!” — the child
+              does not tap.
+            </p>
+            <div class="flag-grid">
+              <label class="flag">
+                <input
+                  type="checkbox"
+                  [checked]="automaticDemo()"
+                  (change)="automaticDemo.set($any($event.target).checked)"
+                />
+                <span>Automatic watch trials</span>
+              </label>
+              <label>
+                <div class="lbl">Demo trials (first N)</div>
+                <input
+                  type="number"
+                  min="0"
+                  [max]="trials()"
+                  [value]="demoTrials()"
+                  [disabled]="!automaticDemo()"
+                  (input)="demoTrials.set(+$any($event.target).value)"
+                />
+              </label>
+            </div>
           </div>
 
           <div class="seq-editor" *ngIf="taskType() === TaskType.Picture">
@@ -368,7 +408,8 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
               </div>
             </div>
 
-            <div class="title" *ngIf="phase() === 'test'">
+            <div class="title" *ngIf="phase() === 'test' && automaticPlayback()">Watch!</div>
+            <div class="title" *ngIf="phase() === 'test' && !automaticPlayback()">
               {{
                 testMode() === TestMode.FreeRecall
                   ? (isSpatialTask() ? 'Touch each location!' : 'Touch each picture!')
@@ -377,10 +418,13 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
                     : 'Touch each picture in order!'
               }}
             </div>
-            <div class="subtitle" *ngIf="phase() === 'test' && testMode() !== TestMode.FreeRecall">
+            <div class="subtitle" *ngIf="phase() === 'test' && automaticPlayback()">
+              {{ isSpatialTask() ? 'Watch each location in order.' : 'Watch each picture in order.' }}
+            </div>
+            <div class="subtitle" *ngIf="phase() === 'test' && !automaticPlayback() && testMode() !== TestMode.FreeRecall">
               Step {{ pressed().length + 1 }} of {{ trialSequence().length }}
             </div>
-            <div class="subtitle" *ngIf="phase() === 'test' && testMode() === TestMode.FreeRecall">
+            <div class="subtitle" *ngIf="phase() === 'test' && !automaticPlayback() && testMode() === TestMode.FreeRecall">
               Response {{ pressed().length + 1 }} of {{ trialSequence().length }}
             </div>
             <div
@@ -407,7 +451,7 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
             <button
               class="cell"
               *ngFor="let cell of gridCells"
-              [class.active]="feedbackBorder() && isGridCellActive(cell)"
+              [class.active]="feedbackBorder() && (isGridCellActive(cell) || isAutoHighlightCell(cell))"
               [class.border-flash]="feedbackBorder() && isCellBorderFlashing(cell)"
               [class.dim]="isGridCellDim(cell)"
               [disabled]="isGridCellDisabled(cell)"
@@ -454,7 +498,7 @@ import { Component, computed, effect, signal, untracked } from '@angular/core';
           <button
             type="button"
             class="study-replay-fab"
-            *ngIf="phase() === 'test' && sessionStudyDone() && !showCongrats()"
+            *ngIf="phase() === 'test' && sessionStudyDone() && !showCongrats() && !automaticPlayback()"
             (click)="teacherReplayStudy()"
           >
             Show study again
@@ -543,6 +587,9 @@ export class AppComponent {
   );
   /** When true, one sequence row applies to every trial (trial 1 is the master). */
   readonly sameSequenceForAllTrials = signal(false);
+  /** First N trials: computer highlights the answer; child watches (no taps). */
+  readonly automaticDemo = signal(false);
+  readonly demoTrials = signal(0);
 
   // Runtime
   readonly trialIndex = signal(0);
@@ -594,12 +641,19 @@ export class AppComponent {
       trial: number;
       taskType: 'location' | 'picture';
       testMode: string;
+      isDemo: boolean;
       sequence: number[];
       presses: number[];
+      touches: TrialTouch[];
       correct: boolean;
       ms: number;
     }>
   >([]);
+
+  /** Every tap during the active trial (including wrong, ignored, and automatic demo steps). */
+  readonly trialTouches = signal<TrialTouch[]>([]);
+  readonly automaticPlayback = signal(false);
+  readonly autoHighlightCell = signal<number | null>(null);
 
   private trialStartedAt = 0;
   private trialTapCount = 0;
@@ -608,8 +662,13 @@ export class AppComponent {
   private congratsTimer: number | null = null;
   private activeAudio: HTMLAudioElement[] = [];
   private borderFlashTimers = new Map<number, number>();
+  private autoDemoTimer: number | null = null;
   /** Grid cells showing a short-lived border after a tap (clears after ~2s). */
   readonly borderFlashCells = signal<Set<number>>(new Set());
+
+  readonly isDemoTrial = computed(
+    () => this.automaticDemo() && this.trialIndex() < Math.max(0, Math.min(this.trials(), this.demoTrials())),
+  );
 
   // Picture picker overlay (visual selection)
   readonly picPickerOpen = signal(false);
@@ -651,6 +710,7 @@ export class AppComponent {
       const s = this.screen();
       if (s !== 'run') {
         this._stopTimer();
+        this._stopAutoDemo();
         this._stopAllAudio();
         this.picPickerOpen.set(false);
         this.locPickerOpen.set(false);
@@ -769,6 +829,7 @@ export class AppComponent {
     this.locTestPics.set({});
     this.picTestCellToPic.set({});
     this.trialTestCells.set([]);
+    this.trialTouches.set([]);
     this._beginTrial();
     this.trialStartedAt = performance.now();
     this.screen.set('run');
@@ -851,8 +912,13 @@ export class AppComponent {
     }
     this.trialTapCount = 0;
     this.trialWrongCount = 0;
+    this.trialTouches.set([]);
     this._clearBorderFlashes();
     this._stopTimer();
+    if (this.isDemoTrial()) {
+      window.setTimeout(() => this._runAutomaticDemo(), 450);
+      return;
+    }
   }
 
   private _runStudyTick() {
@@ -893,24 +959,34 @@ export class AppComponent {
   }
 
   onPick(choice: number, tappedCell: number) {
-    if (this.phase() !== 'test') return;
-    if (this.testMode() === this.TestMode.FreeRecall) {
-      this._onPickFreeRecall(choice, tappedCell);
-      return;
-    }
+    if (this.phase() !== 'test' || this.automaticPlayback()) return;
+    this._handleTestTap(Number(choice), tappedCell);
+  }
 
-    const choiceId = Number(choice);
+  private _handleTestTap(choiceId: number, tappedCell: number) {
     const expected = Number(this.expectedNext());
     const presses = this.pressed();
+    const isFreeRecall = this.testMode() === this.TestMode.FreeRecall;
+    const ignored = this._shouldIgnoreRepeatTap(choiceId, expected);
 
-    // Ignore repeats unless it is the next expected step (handles 13,13 sequences).
-    if (this._shouldIgnoreRepeatTap(choiceId, expected)) return;
+    this._appendTouch({
+      press: this.trialTouches().length + 1,
+      ms: Math.max(0, Math.round(performance.now() - this.trialStartedAt)),
+      choice: choiceId,
+      gridCell: tappedCell,
+      expected,
+      correct: choiceId === expected,
+      ignored,
+      automatic: false,
+    });
+
+    if (ignored) return;
 
     this.trialTapCount++;
     const isFirstTap = this.trialTapCount === 1;
     const ok = choiceId === expected;
     const isFirstWrong = !ok && this.trialWrongCount === 0;
-    const giveFeedback = this._shouldGiveFeedback(ok, isFirstTap, isFirstWrong);
+    const giveFeedback = !isFreeRecall && this._shouldGiveFeedback(ok, isFirstTap, isFirstWrong);
 
     if (giveFeedback && this.feedbackBorder()) {
       this._flashCellBorder(tappedCell);
@@ -929,9 +1005,11 @@ export class AppComponent {
       return;
     }
 
-    if (giveFeedback) {
+    if (!isFreeRecall && giveFeedback) {
       this.feedback.set(ok ? 'correct' : 'wrong');
       this._play(ok ? 'correct' : 'wrong');
+    } else if (isFreeRecall && giveFeedback) {
+      this._play('neutral');
     }
 
     if (!ok) {
@@ -946,42 +1024,28 @@ export class AppComponent {
     const next = [...presses, choiceId];
     this.pressed.set(next);
     this.pressedOrder.set([...this.pressedOrder(), { cell: choiceId, step: next.length }]);
-    if (next.length >= this.trialSequence().length) {
+    if (this._isSequenceComplete(next)) {
       this._completeTrial(next);
     } else if (giveFeedback) {
       window.setTimeout(() => this.feedback.set(null), 450);
     }
   }
 
-  private _onPickFreeRecall(choice: number, tappedCell: number) {
-    const choiceId = Number(choice);
-    const presses = this.pressed();
-    const next = [...presses, choiceId];
-    this.trialTapCount++;
-    const isFirstTap = this.trialTapCount === 1;
-    const giveFeedback = this._shouldGiveFeedback(true, isFirstTap, false);
+  private _isSequenceComplete(presses: number[]) {
+    const seq = this.trialSequence();
+    return presses.length === seq.length && presses.every((value, index) => Number(value) === Number(seq[index]));
+  }
 
-    if (giveFeedback && this.feedbackBorder()) {
-      this._flashCellBorder(tappedCell);
-    }
-
-    this.pressed.set(next);
-    this.pressedOrder.set([...this.pressedOrder(), { cell: choiceId, step: next.length }]);
-
-    if (giveFeedback) {
-      this._play('neutral');
-    }
-
-    if (next.length >= this.trialSequence().length) {
-      this._completeTrial(next);
-    }
+  private _appendTouch(touch: TrialTouch) {
+    this.trialTouches.set([...this.trialTouches(), touch]);
   }
 
   private _completeTrial(presses: number[]) {
     const ms = Math.max(0, Math.round(performance.now() - this.trialStartedAt));
-    const seq = this.trialSequence();
-    const correct = presses.join(',') === seq.join(',');
-    this._recordTrialResult(presses, correct, ms);
+    const correct = this._isSequenceComplete(presses);
+    this._recordTrialResult(presses, correct, ms, this.isDemoTrial());
+
+    if (!correct) return;
 
     this._play('success');
     this._congratsBurst();
@@ -991,24 +1055,105 @@ export class AppComponent {
   private _failTrialAndAdvance() {
     const presses = this.pressed();
     const ms = Math.max(0, Math.round(performance.now() - this.trialStartedAt));
-    this._recordTrialResult(presses, false, ms);
+    this._recordTrialResult(presses, false, ms, this.isDemoTrial());
     this._hideTestGrid();
     window.setTimeout(() => this._nextTrialOrDone(), 700);
   }
 
-  private _recordTrialResult(presses: number[], correct: boolean, ms: number) {
+  private _recordTrialResult(presses: number[], correct: boolean, ms: number, isDemo: boolean) {
     this.results.set([
       ...this.results(),
       {
         trial: this.trialIndex() + 1,
         taskType: this.taskType(),
         testMode: this.testMode(),
+        isDemo,
         sequence: this.trialSequence(),
         presses,
+        touches: [...this.trialTouches()],
         correct,
         ms,
       },
     ]);
+  }
+
+  private _runAutomaticDemo() {
+    if (this.phase() !== 'test' || !this.isDemoTrial()) return;
+
+    const seq = this.trialSequence().map((id) => Number(id));
+    this.automaticPlayback.set(true);
+    this.autoHighlightCell.set(null);
+    this.pressed.set([]);
+    this.pressedOrder.set([]);
+    this.feedback.set(null);
+    this._clearBorderFlashes();
+
+    let step = 0;
+    const stepMs = Math.max(800, this.studySeconds() * 1000);
+
+    const playStep = () => {
+      if (step >= seq.length) {
+        this.automaticPlayback.set(false);
+        this.autoHighlightCell.set(null);
+        const presses = [...seq];
+        this.pressed.set(presses);
+        this.pressedOrder.set(presses.map((cell, index) => ({ cell, step: index + 1 })));
+        this._completeTrial(presses);
+        return;
+      }
+
+      const item = seq[step];
+      const cell = this._gridCellForItem(item);
+      if (cell == null) {
+        step++;
+        playStep();
+        return;
+      }
+
+      this.autoHighlightCell.set(cell);
+      if (this.feedbackBorder()) {
+        this._flashCellBorder(cell);
+      }
+
+      this._appendTouch({
+        press: this.trialTouches().length + 1,
+        ms: Math.max(0, Math.round(performance.now() - this.trialStartedAt)),
+        choice: item,
+        gridCell: cell,
+        expected: item,
+        correct: true,
+        ignored: false,
+        automatic: true,
+      });
+
+      step++;
+      this.autoDemoTimer = window.setTimeout(() => {
+        this.autoHighlightCell.set(null);
+        this.autoDemoTimer = window.setTimeout(playStep, 280);
+      }, stepMs);
+    };
+
+    playStep();
+  }
+
+  private _gridCellForItem(item: number): number | null {
+    if (this.taskType() === this.TaskType.Location) {
+      return this.trialTestCells().includes(item) ? item : null;
+    }
+    const map = this.picTestCellToPic();
+    for (const [cellKey, picId] of Object.entries(map)) {
+      if (Number(picId) === item) return Number(cellKey);
+    }
+    return null;
+  }
+
+  private _stopAutoDemo() {
+    if (this.autoDemoTimer != null) {
+      window.clearTimeout(this.autoDemoTimer);
+      this.autoDemoTimer = null;
+    }
+    this.automaticPlayback.set(false);
+    this.autoHighlightCell.set(null);
   }
 
   private _hideTestGrid() {
@@ -1065,6 +1210,7 @@ export class AppComponent {
   }
 
   private _nextTrialOrDone() {
+    this._stopAutoDemo();
     const t = this.trialIndex() + 1;
     if (t >= this.trials()) {
       this._stopAllAudio();
@@ -1083,9 +1229,29 @@ export class AppComponent {
     this._enterTestPhase();
   }
 
+  private _formatTouchesForCsv(touches: TrialTouch[]) {
+    return touches
+      .map(
+        (t) =>
+          `${t.press}:${t.ms}:${t.choice}:${t.gridCell}:${t.expected}:${t.correct ? 1 : 0}:${t.ignored ? 1 : 0}:${t.automatic ? 1 : 0}`,
+      )
+      .join(';');
+  }
+
   downloadCsv() {
     const rows = this.results();
-    const header = ['subject', 'trial', 'taskType', 'testMode', 'sequence', 'presses', 'correct', 'ms'];
+    const header = [
+      'subject',
+      'trial',
+      'taskType',
+      'testMode',
+      'isDemo',
+      'sequence',
+      'presses',
+      'touches',
+      'correct',
+      'ms',
+    ];
     const lines = [
       header.join(','),
       ...rows.map((r) =>
@@ -1094,8 +1260,10 @@ export class AppComponent {
           r.trial,
           r.taskType,
           r.testMode,
+          r.isDemo ? '1' : '0',
           `"${r.sequence.join(' ')}"`,
           `"${r.presses.join(' ')}"`,
+          `"${this._formatTouchesForCsv(r.touches)}"`,
           r.correct ? '1' : '0',
           r.ms,
         ].join(','),
@@ -1170,6 +1338,10 @@ export class AppComponent {
     return this.borderFlashCells().has(cell);
   }
 
+  isAutoHighlightCell(cell: number) {
+    return this.automaticPlayback() && this.autoHighlightCell() === cell;
+  }
+
   isGridCellActive(cell: number) {
     if (this.phase() !== 'study') return false;
     if (this.taskType() === this.TaskType.Location) {
@@ -1180,6 +1352,7 @@ export class AppComponent {
 
   isGridCellDisabled(cell: number) {
     if (this.phase() !== 'test') return true;
+    if (this.automaticPlayback()) return true;
     if (this.taskType() === this.TaskType.Location) {
       return !this.trialTestCells().includes(cell);
     }

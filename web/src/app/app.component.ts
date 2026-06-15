@@ -610,9 +610,8 @@ export class AppComponent {
   readonly sessionStudyDone = signal(false);
   /** Teacher replayed study mid-test; return to test without resetting the trial. */
   private studyReturnToTest = signal(false);
-  /** Spatial task: varied filler picture per study step (location is what matters). */
-  readonly locStudyPicByStep = signal<number[]>([]);
-  readonly locTestPics = signal<Record<number, number>>({});
+  /** Spatial task: one identical filler picture for the whole trial (study + test). */
+  readonly locTrialPicId = signal(1);
   /** Picture task: random grid cell per study step (1–16). */
   readonly picStudyCellByStep = signal<number[]>([]);
   /** Picture task: test phase cell -> picture id. */
@@ -833,7 +832,7 @@ export class AppComponent {
     this.showCongrats.set(false);
     this._clearBorderFlashes();
     this.sessionStudyDone.set(false);
-    this.locTestPics.set({});
+    this.locTrialPicId.set(1);
     this.picTestCellToPic.set({});
     this.trialTestCells.set([]);
     this.trialTouches.set([]);
@@ -865,9 +864,7 @@ export class AppComponent {
     this.stepIndex.set(0);
     this.phase.set('study');
     this.feedback.set(null);
-    if (this.isSpatialTask()) {
-      this._buildLocStudyPics();
-    } else if (this.taskType() === this.TaskType.Picture) {
+    if (this.taskType() === this.TaskType.Picture) {
       this._buildPicStudyLayout();
     }
     this._runStudyTick();
@@ -886,7 +883,7 @@ export class AppComponent {
       this._buildPicStudyLayout();
     } else {
       this.picStudyCellByStep.set([]);
-      this._buildLocStudyPics();
+      this._buildLocTrialPic();
     }
   }
 
@@ -897,24 +894,7 @@ export class AppComponent {
     this.pressedOrder.set([]);
     this.feedback.set(null);
     if (this.taskType() === this.TaskType.Location) {
-      const choices = this._buildLocationTestCells();
-      this.trialTestCells.set(choices);
-      const mapping: Record<number, number> = {};
-      const seq = this.trialSequence();
-      const studyPics = this.locStudyPicByStep();
-      const targets = new Set(seq);
-      for (const cell of choices) {
-        if (targets.has(cell)) {
-          const avoid = new Set<number>();
-          for (let si = 0; si < seq.length; si++) {
-            if (seq[si] === cell) avoid.add(studyPics[si] ?? 0);
-          }
-          mapping[cell] = this._randPic(avoid);
-        } else {
-          mapping[cell] = this._randPic();
-        }
-      }
-      this.locTestPics.set(mapping);
+      this.trialTestCells.set(this._buildLocationTestCells());
     } else {
       this._buildPicTestLayout();
     }
@@ -1165,7 +1145,7 @@ export class AppComponent {
   }
 
   private _hideTestGrid() {
-    this.locTestPics.set({});
+    this.locTrialPicId.set(1);
     this.picTestCellToPic.set({});
     this.trialTestCells.set([]);
   }
@@ -1406,10 +1386,7 @@ export class AppComponent {
 
   picIdInGridCell(cell: number) {
     if (this.taskType() === this.TaskType.Location) {
-      if (this.phase() === 'study') {
-        return this.locStudyPicByStep()[this.stepIndex()] ?? 1;
-      }
-      return this.locTestPics()[cell] ?? 1;
+      return this.locTrialPicId();
     }
     if (this.phase() === 'study') {
       return this.trialSequence()[this.stepIndex()] ?? 1;
@@ -1421,13 +1398,8 @@ export class AppComponent {
     return this.pressed().includes(choice);
   }
 
-  private _buildLocStudyPics() {
-    const steps = this.trialSequence().length;
-    const pics: number[] = [];
-    for (let i = 0; i < steps; i++) {
-      pics.push(this._randPic(new Set(pics)));
-    }
-    this.locStudyPicByStep.set(pics);
+  private _buildLocTrialPic() {
+    this.locTrialPicId.set(this._randPic());
   }
 
   private _buildPicStudyLayout() {

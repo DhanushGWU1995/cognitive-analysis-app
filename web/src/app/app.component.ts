@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { Component, computed, effect, signal, untracked } from '@angular/core';
+import * as XLSX from 'xlsx';
 
 type TrialTouch = {
   press: number;
@@ -11,6 +12,56 @@ type TrialTouch = {
   ignored: boolean;
   automatic: boolean;
 };
+
+type TrialResult = {
+  trial: number;
+  taskType: 'location' | 'picture';
+  testMode: string;
+  isDemo: boolean;
+  sequence: number[];
+  presses: number[];
+  touches: TrialTouch[];
+  correct: boolean;
+  ms: number;
+  trialSessionStartMs: number;
+  locTrialPic?: number;
+  listNum: number;
+};
+
+/** SELeCT legacy report columns (matches report_template.txt + ListNum before SequenceBy). */
+const LEGACY_REPORT_HEADER = [
+  'Sub',
+  'Date',
+  'Press',
+  'Trial',
+  '',
+  'SequenceBy',
+  'ItemPressed',
+  'CorrectItem',
+  'Progress',
+  'PressAccuracy',
+  'TrialAccuracy',
+  'RT',
+  'SessionTime',
+  'ListNum',
+  'ListPics',
+  'ListLocations',
+  'TrialsNum',
+  'TotalTrialsNum',
+  'StepsNum',
+  'TO',
+  'ITI',
+  'DistractorsEnable',
+  'BlackBorder',
+  'PlaySound',
+  'FreeRecall',
+  'TapMode',
+  'ProgressCorrectOnly',
+  'Automatic',
+  'DemonstrationNum',
+  '',
+  'Notes',
+] as const;
 
 @Component({
   selector: 'app-root',
@@ -510,10 +561,10 @@ type TrialTouch = {
 
         <section class="card" *ngIf="screen() === 'results'">
           <h1>All finished!</h1>
-          <p class="muted">Download results as CSV.</p>
+          <p class="muted">Download a SELeCT-compatible Excel report (one row per press).</p>
           <div class="actions">
             <button class="btn ghost" (click)="screen.set('home')">New session</button>
-            <button class="btn primary" (click)="downloadCsv()">Download CSV</button>
+            <button class="btn primary" (click)="downloadReport()">Download Report</button>
           </div>
           <div class="mini">Completed: {{ results().length }} / {{ trials() }} trial(s)</div>
         </section>
@@ -573,6 +624,7 @@ export class AppComponent {
   // Session setup
   readonly subjectId = signal('kid001');
   readonly trials = signal(5);
+  readonly totalTrialsNum = signal(5);
   readonly stepsNum = signal(2);
   readonly distractorsN = signal(1);
   readonly studySeconds = signal(5);
@@ -639,19 +691,7 @@ export class AppComponent {
   // Assets: pics are 001.jpg..099.jpg
   readonly picIds = Array.from({ length: 99 }, (_v, i) => i + 1);
 
-  readonly results = signal<
-    Array<{
-      trial: number;
-      taskType: 'location' | 'picture';
-      testMode: string;
-      isDemo: boolean;
-      sequence: number[];
-      presses: number[];
-      touches: TrialTouch[];
-      correct: boolean;
-      ms: number;
-    }>
-  >([]);
+  readonly results = signal<TrialResult[]>([]);
 
   /** Every tap during the active trial (including wrong, ignored, and automatic demo steps). */
   readonly trialTouches = signal<TrialTouch[]>([]);
@@ -659,6 +699,10 @@ export class AppComponent {
   readonly autoHighlightCell = signal<number | null>(null);
 
   private trialStartedAt = 0;
+  private sessionStartedAt = 0;
+  private testPhaseStartedAt = 0;
+  private trialSessionStartMs = 0;
+  private sessionDate = new Date();
   private trialTapCount = 0;
   private trialWrongCount = 0;
   private timer: number | null = null;
@@ -836,6 +880,8 @@ export class AppComponent {
     this.picTestCellToPic.set({});
     this.trialTestCells.set([]);
     this.trialTouches.set([]);
+    this.sessionDate = new Date();
+    this.sessionStartedAt = performance.now();
     this._beginTrial();
     this.trialStartedAt = performance.now();
     this.screen.set('run');
@@ -901,6 +947,8 @@ export class AppComponent {
     this.trialTapCount = 0;
     this.trialWrongCount = 0;
     this.trialTouches.set([]);
+    this.testPhaseStartedAt = performance.now();
+    this.trialSessionStartMs = Math.max(0, Math.round(this.testPhaseStartedAt - this.sessionStartedAt));
     this._clearBorderFlashes();
     this._stopTimer();
     if (this.isDemoTrial()) {
@@ -960,7 +1008,7 @@ export class AppComponent {
 
     this._appendTouch({
       press: this.trialTouches().length + 1,
-      ms: Math.max(0, Math.round(performance.now() - this.trialStartedAt)),
+      ms: this._touchElapsedMs(),
       choice: choiceId,
       gridCell: tappedCell,
       expected,
@@ -1057,11 +1105,14 @@ export class AppComponent {
         taskType: this.taskType(),
         testMode: this.testMode(),
         isDemo,
-        sequence: this.trialSequence(),
+        sequence: [...this.trialSequence()],
         presses,
         touches: [...this.trialTouches()],
         correct,
         ms,
+        trialSessionStartMs: this.trialSessionStartMs,
+        locTrialPic: this.taskType() === this.TaskType.Location ? this.locTrialPicId() : undefined,
+        listNum: this._listNumForTrial(this.trialIndex()),
       },
     ]);
   }
@@ -1105,7 +1156,7 @@ export class AppComponent {
 
       this._appendTouch({
         press: this.trialTouches().length + 1,
-        ms: Math.max(0, Math.round(performance.now() - this.trialStartedAt)),
+        ms: this._touchElapsedMs(),
         choice: item,
         gridCell: cell,
         expected: item,
@@ -1219,55 +1270,187 @@ export class AppComponent {
     this._runStudyTick();
   }
 
-  private _formatTouchesForCsv(touches: TrialTouch[]) {
-    return touches
-      .map(
-        (t) =>
-          `${t.press}:${t.ms}:${t.choice}:${t.gridCell}:${t.expected}:${t.correct ? 1 : 0}:${t.ignored ? 1 : 0}:${t.automatic ? 1 : 0}`,
-      )
-      .join(';');
+  private _touchElapsedMs() {
+    return Math.max(0, Math.round(performance.now() - this.testPhaseStartedAt));
   }
 
-  downloadCsv() {
-    const rows = this.results();
-    const header = [
-      'subject',
-      'trial',
-      'taskType',
-      'testMode',
-      'isDemo',
-      'sequence',
-      'presses',
-      'touches',
-      'correct',
-      'ms',
-    ];
-    const lines = [
-      header.join(','),
-      ...rows.map((r) =>
-        [
-          this.subjectId().trim(),
-          r.trial,
-          r.taskType,
-          r.testMode,
-          r.isDemo ? '1' : '0',
-          `"${r.sequence.join(' ')}"`,
-          `"${r.presses.join(' ')}"`,
-          `"${this._formatTouchesForCsv(r.touches)}"`,
-          r.correct ? '1' : '0',
-          r.ms,
-        ].join(','),
-      ),
-    ];
-    const blob = new Blob([lines.join('\n') + '\n'], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `select-toddler-${this.taskType()}-${new Date().toISOString().slice(0, 10)}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+  private _legacyDate(d = this.sessionDate) {
+    const y = d.getFullYear() % 100;
+    return `${d.getMonth() + 1}/${d.getDate()}/${y}`;
+  }
+
+  /** Stimulus list number (increments every TrialsNum trials in long sessions). */
+  private _listNumForTrial(trialIndex: number) {
+    const block = Math.max(1, this.trials());
+    return Math.floor(trialIndex / block) + 1;
+  }
+
+  private _correctProgress(presses: number[], sequence: number[]) {
+    let progress = 0;
+    for (const choice of presses) {
+      if (progress < sequence.length && choice === sequence[progress]) {
+        progress++;
+      }
+    }
+    return progress;
+  }
+
+  /** Legacy Press column = 1-based sequence step being attempted at tap time. */
+  private _legacyPressColumn(pressesBefore: number[], sequence: number[]) {
+    return Math.min(this._correctProgress(pressesBefore, sequence) + 1, Math.max(1, sequence.length));
+  }
+
+  private _legacyPicFileName(id: number) {
+    const stem = id >= 100 ? String(id) : this.pad3(id);
+    return `${stem}.jpeg`;
+  }
+
+  private _legacyTimeStamp(d = new Date()) {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+  }
+
+  private _targetLetters(sequence: number[]) {
+    const map: Record<number, string> = {};
+    for (let i = 0; i < sequence.length; i++) {
+      map[sequence[i]] = String.fromCharCode(65 + i);
+    }
+    return map;
+  }
+
+  private _legacyItemLabel(choice: number, taskType: 'location' | 'picture', letters: Record<number, string>) {
+    if (taskType === 'location') return String(choice);
+    return letters[choice] ?? `X${choice}`;
+  }
+
+  private _legacyListPics(trial: TrialResult) {
+    if (trial.taskType === 'picture') {
+      const seen = new Set<number>();
+      const pics: number[] = [];
+      for (const id of trial.sequence) {
+        if (!seen.has(id)) {
+          seen.add(id);
+          pics.push(id);
+        }
+      }
+      return pics.map((id) => this._legacyPicFileName(id)).join(',');
+    }
+    return this._legacyPicFileName(trial.locTrialPic ?? 1);
+  }
+
+  private _legacyListLocations(trial: TrialResult) {
+    if (trial.taskType === 'location') {
+      const seen = new Set<number>();
+      const cells: number[] = [];
+      for (const cell of trial.sequence) {
+        if (!seen.has(cell)) {
+          seen.add(cell);
+          cells.push(cell);
+        }
+      }
+      return cells.join(',');
+    }
+    return 'random';
+  }
+
+  private _legacySequenceBy(taskType: 'location' | 'picture') {
+    return taskType === 'location' ? 'locations' : 'pictures';
+  }
+
+  private _legacyBool(value: boolean) {
+    return value ? 'TRUE' : 'FALSE';
+  }
+
+  private _legacyTrialAccuracy(trialCorrect: boolean, isLastPress: boolean) {
+    if (!trialCorrect) return 'FALSE';
+    return isLastPress ? 'TRUE' : 'bl';
+  }
+
+  /** Session / test-mode flags written on every legacy report row. */
+  private _legacySessionConfig(trial: TrialResult) {
+    const freeRecall = trial.testMode === this.TestMode.FreeRecall;
+    const progressCorrectOnly = trial.testMode === this.TestMode.AdvanceWhenCorrect;
+    return {
+      iti: '1',
+      playSound: true,
+      freeRecall,
+      tapMode: true,
+      progressCorrectOnly,
+      blackBorder: this.feedbackBorder(),
+    };
+  }
+
+  private _buildLegacyReportRows(): string[][] {
+    const subject = this.subjectId().trim();
+    const date = this._legacyDate();
+    const rows: string[][] = [LEGACY_REPORT_HEADER.slice()];
+
+    for (const trial of this.results()) {
+      const seq = trial.sequence;
+      const letters = this._targetLetters(seq);
+      const recordable = trial.touches.filter((t) => !t.ignored);
+      const pressesSoFar: number[] = [];
+      const notes = trial.isDemo ? 'demo' : '-';
+      const listPics = this._legacyListPics(trial);
+      const cfg = this._legacySessionConfig(trial);
+
+      for (let i = 0; i < recordable.length; i++) {
+        const touch = recordable[i];
+        const pressesBefore = [...pressesSoFar];
+        pressesSoFar.push(touch.choice);
+        const progress = pressesSoFar
+          .map((choice) => this._legacyItemLabel(choice, trial.taskType, letters))
+          .join('');
+        const isLast = i === recordable.length - 1;
+
+        rows.push([
+          subject,
+          date,
+          String(this._legacyPressColumn(pressesBefore, seq)),
+          String(trial.trial),
+          String(trial.listNum),
+          this._legacySequenceBy(trial.taskType),
+          this._legacyItemLabel(touch.choice, trial.taskType, letters),
+          this._legacyItemLabel(touch.expected, trial.taskType, letters),
+          progress,
+          this._legacyBool(touch.correct),
+          this._legacyTrialAccuracy(trial.correct, isLast),
+          (touch.ms / 1000).toFixed(3),
+          ((trial.trialSessionStartMs + touch.ms) / 1000).toFixed(3),
+          String(trial.listNum),
+          listPics,
+          this._legacyListLocations(trial),
+          String(this.trials()),
+          String(this.totalTrialsNum()),
+          String(this.stepsNum()),
+          String(this.studySeconds()),
+          cfg.iti,
+          this._legacyBool(this.distractorsN() > 0),
+          this._legacyBool(cfg.blackBorder),
+          this._legacyBool(cfg.playSound),
+          this._legacyBool(cfg.freeRecall),
+          this._legacyBool(cfg.tapMode),
+          this._legacyBool(cfg.progressCorrectOnly),
+          this._legacyBool(this.automaticDemo() && trial.isDemo),
+          String(this.demoTrials()),
+          '',
+          notes,
+        ]);
+      }
+    }
+
+    return rows;
+  }
+
+  downloadReport() {
+    const rows = this._buildLegacyReportRows();
+    const worksheet = XLSX.utils.aoa_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Report');
+    const subject = this.subjectId().trim() || 'subject';
+    const date = this._legacyDate();
+    const time = this._legacyTimeStamp();
+    XLSX.writeFile(workbook, `SST-SCP${subject}_${date.replace(/\//g, '-')}_${time}.xlsx`);
   }
 
   private _stopTimer() {

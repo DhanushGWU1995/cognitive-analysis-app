@@ -655,7 +655,7 @@ export class AppComponent {
   readonly trials = signal(5);
   readonly totalTrialsNum = signal(5);
   readonly stepsNum = signal(2);
-  readonly distractorsN = signal(1);
+  readonly distractorsN = signal(0);
   readonly studySeconds = signal(5);
   readonly itiSeconds = signal(1);
   /** Correct-step feedback toggles (location + picture test). */

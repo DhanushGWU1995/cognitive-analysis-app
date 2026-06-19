@@ -13,6 +13,25 @@ type TrialTouch = {
   automatic: boolean;
 };
 
+type TrialReportMeta = {
+  trialInList: number;
+  listNum: number;
+  trialsNum: number;
+  totalTrialsNum: number;
+  stepsNum: number;
+  studySeconds: number;
+  itiSeconds: number;
+  distractorsN: number;
+  feedbackBorder: boolean;
+  automaticDemo: boolean;
+  demoTrials: number;
+  freeRecall: boolean;
+  progressCorrectOnly: boolean;
+  playSound: boolean;
+  listPics: string;
+  listLocations: string;
+};
+
 type TrialResult = {
   trial: number;
   taskType: 'location' | 'picture';
@@ -25,7 +44,7 @@ type TrialResult = {
   ms: number;
   trialSessionStartMs: number;
   locTrialPic?: number;
-  listNum: number;
+  report: TrialReportMeta;
 };
 
 /** SELeCT legacy report columns (matches report_template.txt + ListNum before SequenceBy). */
@@ -628,6 +647,7 @@ export class AppComponent {
   readonly stepsNum = signal(2);
   readonly distractorsN = signal(1);
   readonly studySeconds = signal(5);
+  readonly itiSeconds = signal(1);
   /** Correct-step feedback toggles (location + picture test). */
   readonly feedbackBorder = signal(true);
   readonly feedbackStepNumber = signal(true);
@@ -787,6 +807,11 @@ export class AppComponent {
       }
     });
     this.setTestMode(this.testMode());
+    effect(() => {
+      if (this.screen() !== 'setup') return;
+      const t = Math.max(1, this.trials());
+      untracked(() => this.totalTrialsNum.set(t));
+    });
   }
 
   setTestMode(mode: (typeof this.TestMode)[keyof typeof this.TestMode]) {
@@ -882,6 +907,7 @@ export class AppComponent {
     this.trialTouches.set([]);
     this.sessionDate = new Date();
     this.sessionStartedAt = performance.now();
+    this.totalTrialsNum.set(this.trials());
     this._beginTrial();
     this.trialStartedAt = performance.now();
     this.screen.set('run');
@@ -1098,23 +1124,53 @@ export class AppComponent {
   }
 
   private _recordTrialResult(presses: number[], correct: boolean, ms: number, isDemo: boolean) {
+    const sequence = [...this.trialSequence()];
+    const taskType = this.taskType();
+    const trialIdx = this.trialIndex();
     this.results.set([
       ...this.results(),
       {
-        trial: this.trialIndex() + 1,
-        taskType: this.taskType(),
+        trial: trialIdx + 1,
+        taskType,
         testMode: this.testMode(),
         isDemo,
-        sequence: [...this.trialSequence()],
+        sequence,
         presses,
         touches: [...this.trialTouches()],
         correct,
         ms,
         trialSessionStartMs: this.trialSessionStartMs,
-        locTrialPic: this.taskType() === this.TaskType.Location ? this.locTrialPicId() : undefined,
-        listNum: this._listNumForTrial(this.trialIndex()),
+        locTrialPic: taskType === this.TaskType.Location ? this.locTrialPicId() : undefined,
+        report: this._buildTrialReportMeta(trialIdx, taskType, sequence),
       },
     ]);
+  }
+
+  private _buildTrialReportMeta(
+    trialIndex: number,
+    taskType: 'location' | 'picture',
+    sequence: number[],
+  ): TrialReportMeta {
+    const trialsNum = Math.max(1, this.trials());
+    const testMode = this.testMode();
+    return {
+      trialInList: (trialIndex % trialsNum) + 1,
+      listNum: Math.floor(trialIndex / trialsNum) + 1,
+      trialsNum,
+      totalTrialsNum: Math.max(1, this.totalTrialsNum()),
+      stepsNum: Math.max(1, this.stepsNum()),
+      studySeconds: Math.max(1, this.studySeconds()),
+      itiSeconds: Math.max(1, this.itiSeconds()),
+      distractorsN: Math.max(0, this.distractorsN()),
+      feedbackBorder: this.feedbackBorder(),
+      automaticDemo: this.automaticDemo(),
+      demoTrials: Math.max(0, this.demoTrials()),
+      freeRecall: testMode === this.TestMode.FreeRecall,
+      progressCorrectOnly: testMode === this.TestMode.AdvanceWhenCorrect,
+      playSound: testMode !== this.TestMode.FreeRecall,
+      listPics: this._legacyListPicsForList(taskType, trialIndex, trialsNum),
+      listLocations: this._legacyListLocationsForList(taskType, trialIndex, trialsNum),
+    };
   }
 
   private _runAutomaticDemo() {
@@ -1207,20 +1263,20 @@ export class AppComponent {
     return isFirstTap;
   }
 
-  /** Ignore re-tapping an already-used choice that is not the current expected step. */
-  private _shouldIgnoreRepeatTap(choice: number, expected: number): boolean {
-    if (choice === expected) return false;
-    const presses = this.pressed();
-    if (!presses.includes(choice)) return false;
+  /** Tap mode on: record every press (including repeat wrong taps), matching legacy report rows. */
+  private _shouldIgnoreRepeatTap(_choice: number, _expected: number): boolean {
+    return false;
+  }
 
-    if (this.taskType() === this.TaskType.Picture) {
-      const seq = this.trialSequence().map((id) => Number(id));
-      const timesUsed = presses.filter((p) => p === choice).length;
-      const timesRequiredByNow = seq.slice(0, presses.length + 1).filter((id) => id === choice).length;
-      return timesUsed >= timesRequiredByNow;
-    }
+  private _legacyExpectedAtProgress(sequence: number[], correctBefore: number) {
+    return sequence[Math.min(correctBefore, Math.max(0, sequence.length - 1))];
+  }
 
-    return true;
+  private _legacyProgressString(
+    pressesIncludingCurrent: number[],
+    letters: Record<number, string>,
+  ) {
+    return pressesIncludingCurrent.map((choice) => this._legacyItemLabel(choice, letters)).join('');
   }
 
   private _flashCellBorder(cell: number) {
@@ -1275,14 +1331,12 @@ export class AppComponent {
   }
 
   private _legacyDate(d = this.sessionDate) {
-    const y = d.getFullYear() % 100;
-    return `${d.getMonth() + 1}/${d.getDate()}/${y}`;
+    return `${d.getMonth() + 1}-${d.getDate()}-${d.getFullYear()}`;
   }
 
-  /** Stimulus list number (increments every TrialsNum trials in long sessions). */
-  private _listNumForTrial(trialIndex: number) {
-    const block = Math.max(1, this.trials());
-    return Math.floor(trialIndex / block) + 1;
+  /** Step index being attempted (1-based), same for location and picture tasks. */
+  private _legacyPressValue(pressesBefore: number[], sequence: number[]) {
+    return Math.min(this._correctProgress(pressesBefore, sequence) + 1, Math.max(1, sequence.length));
   }
 
   private _correctProgress(presses: number[], sequence: number[]) {
@@ -1295,14 +1349,9 @@ export class AppComponent {
     return progress;
   }
 
-  /** Legacy Press column = 1-based sequence step being attempted at tap time. */
-  private _legacyPressColumn(pressesBefore: number[], sequence: number[]) {
-    return Math.min(this._correctProgress(pressesBefore, sequence) + 1, Math.max(1, sequence.length));
-  }
-
   private _legacyPicFileName(id: number) {
     const stem = id >= 100 ? String(id) : this.pad3(id);
-    return `${stem}.jpeg`;
+    return `${stem}.jpg`;
   }
 
   private _legacyTimeStamp(d = new Date()) {
@@ -1318,39 +1367,56 @@ export class AppComponent {
     return map;
   }
 
-  private _legacyItemLabel(choice: number, taskType: 'location' | 'picture', letters: Record<number, string>) {
-    if (taskType === 'location') return String(choice);
+  private _legacyItemLabel(choice: number, letters: Record<number, string>) {
     return letters[choice] ?? `X${choice}`;
   }
 
-  private _legacyListPics(trial: TrialResult) {
-    if (trial.taskType === 'picture') {
-      const seen = new Set<number>();
-      const pics: number[] = [];
-      for (const id of trial.sequence) {
+  /** Picture filenames / spatial filler mode for the whole stimulus list block. */
+  private _legacyListPicsForList(
+    taskType: 'location' | 'picture',
+    trialIndex: number,
+    trialsNum: number,
+  ) {
+    if (taskType === 'location') {
+      return 'random/identical';
+    }
+    const start = Math.floor(trialIndex / trialsNum) * trialsNum;
+    const end = Math.min(start + trialsNum, this.pictureSequences().length);
+    const seen = new Set<number>();
+    const pics: number[] = [];
+    for (const seq of this.pictureSequences().slice(start, end)) {
+      for (const id of seq) {
         if (!seen.has(id)) {
           seen.add(id);
           pics.push(id);
         }
       }
-      return pics.map((id) => this._legacyPicFileName(id)).join(',');
     }
-    return this._legacyPicFileName(trial.locTrialPic ?? 1);
+    return pics.map((id) => this._legacyPicFileName(id)).join(',');
   }
 
-  private _legacyListLocations(trial: TrialResult) {
-    if (trial.taskType === 'location') {
-      const seen = new Set<number>();
-      const cells: number[] = [];
-      for (const cell of trial.sequence) {
+  /** Grid cells used across all trials in the current stimulus list block. */
+  private _legacyListLocationsForList(
+    taskType: 'location' | 'picture',
+    trialIndex: number,
+    trialsNum: number,
+  ) {
+    if (taskType !== 'location') {
+      return 'random';
+    }
+    const start = Math.floor(trialIndex / trialsNum) * trialsNum;
+    const end = Math.min(start + trialsNum, this.locationSequences().length);
+    const seen = new Set<number>();
+    const cells: number[] = [];
+    for (const seq of this.locationSequences().slice(start, end)) {
+      for (const cell of seq) {
         if (!seen.has(cell)) {
           seen.add(cell);
           cells.push(cell);
         }
       }
-      return cells.join(',');
     }
-    return 'random';
+    return cells.join(',');
   }
 
   private _legacySequenceBy(taskType: 'location' | 'picture') {
@@ -1358,26 +1424,16 @@ export class AppComponent {
   }
 
   private _legacyBool(value: boolean) {
-    return value ? 'TRUE' : 'FALSE';
+    return value ? 'True' : 'False';
   }
 
   private _legacyTrialAccuracy(trialCorrect: boolean, isLastPress: boolean) {
-    if (!trialCorrect) return 'FALSE';
-    return isLastPress ? 'TRUE' : 'bl';
+    if (!trialCorrect) return 'False';
+    return isLastPress ? 'True' : 'bl';
   }
 
-  /** Session / test-mode flags written on every legacy report row. */
-  private _legacySessionConfig(trial: TrialResult) {
-    const freeRecall = trial.testMode === this.TestMode.FreeRecall;
-    const progressCorrectOnly = trial.testMode === this.TestMode.AdvanceWhenCorrect;
-    return {
-      iti: '1',
-      playSound: true,
-      freeRecall,
-      tapMode: true,
-      progressCorrectOnly,
-      blackBorder: this.feedbackBorder(),
-    };
+  private _legacyNotes(isDemo: boolean) {
+    return isDemo ? 'demo' : '-';
   }
 
   private _buildLegacyReportRows(): string[][] {
@@ -1388,51 +1444,50 @@ export class AppComponent {
     for (const trial of this.results()) {
       const seq = trial.sequence;
       const letters = this._targetLetters(seq);
-      const recordable = trial.touches.filter((t) => !t.ignored);
+      const recordable = trial.touches.filter((t) => !t.ignored && !t.automatic);
       const pressesSoFar: number[] = [];
-      const notes = trial.isDemo ? 'demo' : '-';
-      const listPics = this._legacyListPics(trial);
-      const cfg = this._legacySessionConfig(trial);
+      const meta = trial.report;
+      const notes = this._legacyNotes(trial.isDemo);
 
       for (let i = 0; i < recordable.length; i++) {
         const touch = recordable[i];
         const pressesBefore = [...pressesSoFar];
         pressesSoFar.push(touch.choice);
-        const progress = pressesSoFar
-          .map((choice) => this._legacyItemLabel(choice, trial.taskType, letters))
-          .join('');
+        const correctBefore = this._correctProgress(pressesBefore, seq);
+        const expectedId = this._legacyExpectedAtProgress(seq, correctBefore);
         const isLast = i === recordable.length - 1;
+        const touchCorrect = touch.choice === expectedId;
 
         rows.push([
           subject,
           date,
-          String(this._legacyPressColumn(pressesBefore, seq)),
-          String(trial.trial),
-          String(trial.listNum),
+          String(this._legacyPressValue(pressesBefore, seq)),
+          String(meta.trialInList),
+          String(meta.listNum),
           this._legacySequenceBy(trial.taskType),
-          this._legacyItemLabel(touch.choice, trial.taskType, letters),
-          this._legacyItemLabel(touch.expected, trial.taskType, letters),
-          progress,
-          this._legacyBool(touch.correct),
+          this._legacyItemLabel(touch.choice, letters),
+          this._legacyItemLabel(expectedId, letters),
+          this._legacyProgressString(pressesSoFar, letters),
+          this._legacyBool(touchCorrect),
           this._legacyTrialAccuracy(trial.correct, isLast),
           (touch.ms / 1000).toFixed(3),
           ((trial.trialSessionStartMs + touch.ms) / 1000).toFixed(3),
-          String(trial.listNum),
-          listPics,
-          this._legacyListLocations(trial),
-          String(this.trials()),
-          String(this.totalTrialsNum()),
-          String(this.stepsNum()),
-          String(this.studySeconds()),
-          cfg.iti,
-          this._legacyBool(this.distractorsN() > 0),
-          this._legacyBool(cfg.blackBorder),
-          this._legacyBool(cfg.playSound),
-          this._legacyBool(cfg.freeRecall),
-          this._legacyBool(cfg.tapMode),
-          this._legacyBool(cfg.progressCorrectOnly),
-          this._legacyBool(this.automaticDemo() && trial.isDemo),
-          String(this.demoTrials()),
+          String(meta.listNum),
+          meta.listPics,
+          meta.listLocations,
+          String(meta.trialsNum),
+          String(meta.totalTrialsNum),
+          String(meta.stepsNum),
+          String(meta.studySeconds),
+          String(meta.itiSeconds),
+          this._legacyBool(meta.distractorsN > 0),
+          this._legacyBool(meta.feedbackBorder),
+          this._legacyBool(meta.playSound),
+          this._legacyBool(meta.freeRecall),
+          'True',
+          this._legacyBool(meta.progressCorrectOnly),
+          this._legacyBool(meta.automaticDemo),
+          String(meta.demoTrials),
           '',
           notes,
         ]);
@@ -1450,7 +1505,7 @@ export class AppComponent {
     const subject = this.subjectId().trim() || 'subject';
     const date = this._legacyDate();
     const time = this._legacyTimeStamp();
-    XLSX.writeFile(workbook, `SST-SCP${subject}_${date.replace(/\//g, '-')}_${time}.xlsx`);
+    XLSX.writeFile(workbook, `SST-SCP${subject}_${date}_${time}.xlsx`);
   }
 
   private _stopTimer() {

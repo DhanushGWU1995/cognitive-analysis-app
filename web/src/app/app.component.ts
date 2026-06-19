@@ -471,7 +471,10 @@ const LEGACY_REPORT_HEADER = [
 
             <div class="study-ready" *ngIf="phase() === 'studyReady'">
               <div class="title">Study complete</div>
-              <p class="subtitle">
+              <p class="subtitle" *ngIf="sameSequenceForAllTrials()">
+                The same sequence applies to every trial. Continue to test when ready, or watch the study once more.
+              </p>
+              <p class="subtitle" *ngIf="!sameSequenceForAllTrials()">
                 Ready for trial {{ trialIndex() + 1 }}? Continue to test, or watch the study sequence once more.
               </p>
               <div class="study-ready-actions">
@@ -570,7 +573,12 @@ const LEGACY_REPORT_HEADER = [
           <button
             type="button"
             class="study-replay-fab"
-            *ngIf="phase() === 'test' && !showCongrats() && !automaticPlayback()"
+            *ngIf="
+              sameSequenceForAllTrials() &&
+              phase() === 'test' &&
+              !showCongrats() &&
+              !automaticPlayback()
+            "
             (click)="teacherReplayStudy()"
           >
             Show study again
@@ -1319,11 +1327,22 @@ export class AppComponent {
     this.feedback.set(null);
     this.showCongrats.set(false);
     this._clearBorderFlashes();
-    this.sessionStudyDone.set(false);
     this.studyReturnToTest.set(false);
     this._beginTrial();
     this.trialStartedAt = performance.now();
+
+    if (this._shouldSkipAutoStudyBeforeTrial()) {
+      this._enterTestPhase();
+      return;
+    }
+
+    this.sessionStudyDone.set(false);
     this._runStudyTick();
+  }
+
+  /** Same sequence for all trials: study runs once at session start; teacher replays manually. */
+  private _shouldSkipAutoStudyBeforeTrial() {
+    return this.sameSequenceForAllTrials() && this.trialIndex() > 0;
   }
 
   private _touchElapsedMs() {

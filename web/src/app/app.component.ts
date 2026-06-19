@@ -244,7 +244,8 @@ const LEGACY_REPORT_HEADER = [
             <h2>Automatic demonstration</h2>
             <p class="muted small">
               On demo trials the computer highlights each correct step in order (border and sound always on). The
-              teacher says “Watch!” — the child does not tap.
+              teacher says “Watch!” — the child does not tap. Teacher study/practice is skipped on demo trials; the
+              automatic watch is the demonstration.
             </p>
             <div class="flag-grid">
               <label class="flag">
@@ -577,7 +578,8 @@ const LEGACY_REPORT_HEADER = [
               sameSequenceForAllTrials() &&
               phase() === 'test' &&
               !showCongrats() &&
-              !automaticPlayback()
+              !automaticPlayback() &&
+              !isDemoTrial()
             "
             (click)="teacherReplayStudy()"
           >
@@ -900,9 +902,7 @@ export class AppComponent {
     if (!this.canStart()) return;
     this.results.set([]);
     this.trialIndex.set(0);
-    this.phase.set('study');
     this.stepIndex.set(0);
-    this.countdown.set(this.studySeconds());
     this.pressed.set([]);
     this.pressedOrder.set([]);
     this.feedback.set(null);
@@ -919,6 +919,14 @@ export class AppComponent {
     this._beginTrial();
     this.trialStartedAt = performance.now();
     this.screen.set('run');
+
+    if (this._shouldSkipTeacherStudy()) {
+      this._enterTestPhase();
+      return;
+    }
+
+    this.phase.set('study');
+    this.countdown.set(this.studySeconds());
     this._runStudyTick();
   }
 
@@ -928,7 +936,7 @@ export class AppComponent {
   }
 
   teacherReplayStudy() {
-    if (this.phase() !== 'test' || this.showCongrats()) return;
+    if (this.phase() !== 'test' || this.showCongrats() || this.isDemoTrial()) return;
     this.studyReturnToTest.set(true);
     this._startStudyPlayback();
   }
@@ -1331,13 +1339,19 @@ export class AppComponent {
     this._beginTrial();
     this.trialStartedAt = performance.now();
 
-    if (this._shouldSkipAutoStudyBeforeTrial()) {
+    if (this._shouldSkipTeacherStudy()) {
       this._enterTestPhase();
       return;
     }
 
     this.sessionStudyDone.set(false);
     this._runStudyTick();
+  }
+
+  /** Skip teacher-led study: ghost demo trials, or same-sequence trials after the first. */
+  private _shouldSkipTeacherStudy() {
+    if (this.isDemoTrial()) return true;
+    return this._shouldSkipAutoStudyBeforeTrial();
   }
 
   /** Same sequence for all trials: study runs once at session start; teacher replays manually. */

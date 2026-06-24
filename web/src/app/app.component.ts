@@ -632,6 +632,27 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
       </main>
 
       <div
+        class="picker-overlay run-prompt"
+        *ngIf="screen() === 'run' && sequenceChangedPromptOpen()"
+        (click)="dismissSequenceChangedPrompt()"
+      >
+        <div class="picker same-seq-prompt" (click)="$event.stopPropagation()">
+          <div class="picker-top">
+            <div class="picker-title">Sequence changed</div>
+          </div>
+          <p class="same-seq-prompt-copy">
+            Trial {{ trialIndex() + 1 }} uses a new
+            {{ isSpatialTask() ? 'location' : 'picture' }} sequence
+            <b>({{ currentTrialSequenceLabel() }})</b>. The previous trial used a different sequence, so study will
+            run before this trial.
+          </p>
+          <div class="same-seq-prompt-actions">
+            <button class="btn primary" type="button" (click)="dismissSequenceChangedPrompt()">OK</button>
+          </div>
+        </div>
+      </div>
+
+      <div
         class="congrats"
         *ngIf="screen() === 'run' && showCongrats()"
         role="dialog"
@@ -780,6 +801,7 @@ export class AppComponent {
   readonly locPickerStep = signal(0);
   readonly sameSequencePromptOpen = signal(false);
   private pendingStartAfterSameSequencePrompt = false;
+  readonly sequenceChangedPromptOpen = signal(false);
 
   readonly expectedNext = computed(() => {
     const seq = this.trialSequence();
@@ -981,6 +1003,7 @@ export class AppComponent {
     this.showCongrats.set(false);
     this._clearBorderFlashes();
     this.sessionStudyDone.set(false);
+    this.sequenceChangedPromptOpen.set(false);
     this.locTrialPicId.set(1);
     this.picTestCellToPic.set({});
     this.trialTestCells.set([]);
@@ -991,12 +1014,62 @@ export class AppComponent {
     this._beginTrial();
     this.trialStartedAt = performance.now();
     this.screen.set('run');
+    this._startTrialPhaseAfterSetup();
+  }
 
+  dismissSequenceChangedPrompt() {
+    this.sequenceChangedPromptOpen.set(false);
+    this._startTeacherStudyForCurrentTrial();
+  }
+
+  currentTrialSequenceLabel() {
+    const seq = this.trialSequence();
+    if (this.isSpatialTask()) {
+      return seq.map((cell) => `Cell ${cell}`).join(' → ');
+    }
+    return seq.map((id) => this.pad3(id)).join(' → ');
+  }
+
+  private _trialSequenceAt(trialIdx: number) {
+    const seqs =
+      this.taskType() === this.TaskType.Location ? this.locationSequences() : this.pictureSequences();
+    const row = seqs[Math.min(trialIdx, seqs.length - 1)] ?? [];
+    return (row.length ? row : [1]).slice(0, Math.max(1, this.stepsNum()));
+  }
+
+  private _sequenceKey(seq: number[]) {
+    return JSON.stringify(seq);
+  }
+
+  private _sequenceMatchesPreviousTrial(trialIdx: number) {
+    if (trialIdx <= 0) return false;
+    return (
+      this._sequenceKey(this._trialSequenceAt(trialIdx)) ===
+      this._sequenceKey(this._trialSequenceAt(trialIdx - 1))
+    );
+  }
+
+  private _needsSequenceChangePrompt() {
+    if (this.sameSequenceForAllTrials() || this.isDemoTrial()) return false;
+    const t = this.trialIndex();
+    if (t <= 0) return false;
+    return !this._sequenceMatchesPreviousTrial(t);
+  }
+
+  private _startTrialPhaseAfterSetup() {
     if (this._shouldSkipTeacherStudy()) {
       this._enterTestPhase();
       return;
     }
+    if (this._needsSequenceChangePrompt()) {
+      this.sequenceChangedPromptOpen.set(true);
+      return;
+    }
+    this._startTeacherStudyForCurrentTrial();
+  }
 
+  private _startTeacherStudyForCurrentTrial() {
+    this.sessionStudyDone.set(false);
     this.phase.set('study');
     this.countdown.set(this.studySeconds());
     this._runStudyTick();
@@ -1410,25 +1483,14 @@ export class AppComponent {
     this.studyReturnToTest.set(false);
     this._beginTrial();
     this.trialStartedAt = performance.now();
-
-    if (this._shouldSkipTeacherStudy()) {
-      this._enterTestPhase();
-      return;
-    }
-
-    this.sessionStudyDone.set(false);
-    this._runStudyTick();
+    this._startTrialPhaseAfterSetup();
   }
 
-  /** Skip teacher-led study: ghost demo trials, or same-sequence trials after the first. */
+  /** Skip teacher-led study: ghost demo trials, shared-sequence mode, or same sequence as previous trial. */
   private _shouldSkipTeacherStudy() {
     if (this.isDemoTrial()) return true;
-    return this._shouldSkipAutoStudyBeforeTrial();
-  }
-
-  /** Same sequence for all trials: study runs once at session start; teacher replays manually. */
-  private _shouldSkipAutoStudyBeforeTrial() {
-    return this.sameSequenceForAllTrials() && this.trialIndex() > 0;
+    if (this.sameSequenceForAllTrials()) return this.trialIndex() > 0;
+    return this._sequenceMatchesPreviousTrial(this.trialIndex());
   }
 
   private _touchElapsedMs() {

@@ -1003,6 +1003,10 @@ input {
   border-bottom: 1px solid rgba(15, 23, 42, 0.08);
 }
 
+.run-prompt {
+  z-index: 10000;
+}
+
 .picker-title {
   font-weight: 1000;
 }

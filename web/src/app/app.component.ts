@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, effect, signal, untracked } from '@angular/core';
+import { Component, HostBinding, computed, effect, signal, untracked } from '@angular/core';
 import * as XLSX from 'xlsx';
 
 type TrialTouch = {
@@ -96,7 +96,7 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
   selector: 'app-root',
   imports: [CommonModule],
   template: `
-    <div class="app-shell">
+    <div class="app-shell" [class.run-screen]="screen() === 'run'">
       <header class="topbar">
         <div class="brand">
           <div class="logo">SELeCT</div>
@@ -620,6 +620,7 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
             </div>
           </div>
 
+          <div class="stage-grid-wrap">
           <div class="grid4">
             <button
               class="cell"
@@ -661,6 +662,7 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
                 <div class="cell-empty" aria-hidden="true"></div>
               </ng-template>
             </button>
+          </div>
           </div>
 
           <div class="feedback" *ngIf="feedback() && testMode() !== TestMode.FreeRecall">
@@ -749,6 +751,11 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
   styleUrl: './app.component.scss'
 })
 export class AppComponent {
+  @HostBinding('class.run-active')
+  get hostRunActive() {
+    return this.screen() === 'run';
+  }
+
   readonly TaskType = {
     Location: 'location',
     Picture: 'picture',

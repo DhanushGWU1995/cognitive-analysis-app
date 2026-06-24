@@ -806,12 +806,12 @@ export class AppComponent {
       const syncAll = this.sameSequenceForAllTrials();
       if (task === this.TaskType.Picture) {
         const cur = untracked(() => this.pictureSequences());
-        let next = this._normalizeSequences(cur, t, steps, 1, 99);
+        let next = this._normalizeSequences(cur, t, steps, 1, 99, true);
         if (syncAll) next = this._syncAllTrialsToMaster(next);
         this.pictureSequences.set(next);
       } else {
         const cur = untracked(() => this.locationSequences());
-        let next = this._normalizeSequences(cur, t, steps, 1, 16);
+        let next = this._normalizeSequences(cur, t, steps, 1, 16, true);
         if (syncAll) next = this._syncAllTrialsToMaster(next);
         this.locationSequences.set(next);
       }
@@ -879,14 +879,14 @@ export class AppComponent {
       const t = Math.max(1, this.trials());
       const steps = Math.max(1, this.stepsNum());
       const next = this._syncAllTrialsToMaster(
-        this._normalizeSequences(this.pictureSequences(), t, steps, 1, 99),
+        this._normalizeSequences(this.pictureSequences(), t, steps, 1, 99, true),
       );
       this.pictureSequences.set(next);
     } else {
       const t = Math.max(1, this.trials());
       const steps = Math.max(1, this.stepsNum());
       const next = this._syncAllTrialsToMaster(
-        this._normalizeSequences(this.locationSequences(), t, steps, 1, 16),
+        this._normalizeSequences(this.locationSequences(), t, steps, 1, 16, true),
       );
       this.locationSequences.set(next);
     }
@@ -1761,7 +1761,7 @@ export class AppComponent {
     const pic = Math.max(1, Math.min(99, Number(value) || 1));
     const t = Math.max(1, this.trials());
     const steps = Math.max(1, this.stepsNum());
-    let next = this._normalizeSequences(this.pictureSequences(), t, steps, 1, 99).map((row) => [...row]);
+    let next = this._normalizeSequences(this.pictureSequences(), t, steps, 1, 99, true).map((row) => [...row]);
     if (!next[trialIdx]) return;
     next[trialIdx][stepIdx] = pic;
     if (this.sameSequenceForAllTrials()) next = this._syncAllTrialsToMaster(next);
@@ -1822,11 +1822,19 @@ export class AppComponent {
     const cell = Math.max(1, Math.min(16, Number(value) || 1));
     const t = Math.max(1, this.trials());
     const steps = Math.max(1, this.stepsNum());
-    let next = this._normalizeSequences(this.locationSequences(), t, steps, 1, 16).map((row) => [...row]);
+    let next = this._normalizeSequences(this.locationSequences(), t, steps, 1, 16, true).map((row) => [...row]);
     if (!next[trialIdx]) return;
     next[trialIdx][stepIdx] = cell;
     if (this.sameSequenceForAllTrials()) next = this._syncAllTrialsToMaster(next);
     this.locationSequences.set(next);
+  }
+
+  private _firstUnusedInRange(used: number[], minVal: number, maxVal: number) {
+    const usedSet = new Set(used);
+    for (let v = minVal; v <= maxVal; v++) {
+      if (!usedSet.has(v)) return v;
+    }
+    return minVal;
   }
 
   private _normalizeSequences(
@@ -1835,6 +1843,7 @@ export class AppComponent {
     steps: number,
     minVal: number,
     maxVal: number,
+    uniquePerRow = false,
   ) {
     const safeVal = (x: number | undefined, fallback: number) => {
       const n = Number(x);
@@ -1846,8 +1855,19 @@ export class AppComponent {
       const prev = seqs[i] ?? seqs[seqs.length - 1] ?? [];
       const row: number[] = [];
       for (let s = 0; s < steps; s++) {
-        const fb = safeVal(prev[s], minVal);
-        row.push(fb);
+        if (prev[s] !== undefined && Number.isFinite(Number(prev[s]))) {
+          row.push(safeVal(prev[s], minVal));
+        } else {
+          row.push(this._firstUnusedInRange(row, minVal, maxVal));
+        }
+      }
+      if (uniquePerRow) {
+        for (let s = 0; s < row.length; s++) {
+          const earlier = row.slice(0, s);
+          if (earlier.includes(row[s])) {
+            row[s] = this._firstUnusedInRange(earlier, minVal, maxVal);
+          }
+        }
       }
       out.push(row);
     }

@@ -82,6 +82,22 @@ const LEGACY_REPORT_HEADER = [
   'Notes',
 ] as const;
 
+const DEFAULT_LOCATION_ROWS: number[][] = [
+  [13, 6],
+  [10, 3],
+  [14, 11],
+  [2, 5],
+  [7, 16],
+];
+
+const DEFAULT_PICTURE_ROWS: number[][] = [
+  [13, 5],
+  [8, 2],
+  [21, 7],
+  [11, 19],
+  [3, 15],
+];
+
 @Component({
   selector: 'app-root',
   imports: [CommonModule],
@@ -718,21 +734,9 @@ export class AppComponent {
   readonly gridCells = Array.from({ length: 16 }, (_, i) => i + 1);
 
   // A tiny built-in demo sequence plan (one line per trial)
-  readonly locationSequences = signal<number[][]>([
-    [13, 6],
-    [10, 3],
-    [14, 11],
-    [2, 5],
-    [7, 16],
-  ]);
+  readonly locationSequences = signal<number[][]>(DEFAULT_LOCATION_ROWS.map((row) => [...row]));
 
-  readonly pictureSequences = signal<number[][]>([
-    [13, 5],
-    [8, 2],
-    [21, 7],
-    [11, 19],
-    [3, 15],
-  ]);
+  readonly pictureSequences = signal<number[][]>(DEFAULT_PICTURE_ROWS.map((row) => [...row]));
 
   // Assets: pics are 001.jpg..099.jpg
   readonly picIds = Array.from({ length: 99 }, (_v, i) => i + 1);
@@ -824,14 +828,16 @@ export class AppComponent {
       const syncAll = this.sameSequenceForAllTrials();
       if (task === this.TaskType.Picture) {
         const cur = untracked(() => this.pictureSequences());
-        let next = this._normalizeSequences(cur, t, steps, 1, 99, true);
+        let next = this._normalizeSequences(cur, t, steps, 1, 99, true, DEFAULT_PICTURE_ROWS);
         if (syncAll) next = this._syncAllTrialsToMaster(next);
         this.pictureSequences.set(next);
+        untracked(() => this._maybePromptSameSequenceForAllTrials(false));
       } else {
         const cur = untracked(() => this.locationSequences());
-        let next = this._normalizeSequences(cur, t, steps, 1, 16, true);
+        let next = this._normalizeSequences(cur, t, steps, 1, 16, true, DEFAULT_LOCATION_ROWS);
         if (syncAll) next = this._syncAllTrialsToMaster(next);
         this.locationSequences.set(next);
+        untracked(() => this._maybePromptSameSequenceForAllTrials(false));
       }
     });
     this.setTestMode(this.testMode());
@@ -874,6 +880,8 @@ export class AppComponent {
     this.sameSequenceForAllTrials.set(false);
     this.sameSequencePromptOpen.set(false);
     this.pendingStartAfterSameSequencePrompt = false;
+    this.locationSequences.set(DEFAULT_LOCATION_ROWS.map((row) => [...row]));
+    this.pictureSequences.set(DEFAULT_PICTURE_ROWS.map((row) => [...row]));
     this.screen.set('setup');
   }
 
@@ -899,14 +907,14 @@ export class AppComponent {
       const t = Math.max(1, this.trials());
       const steps = Math.max(1, this.stepsNum());
       const next = this._syncAllTrialsToMaster(
-        this._normalizeSequences(this.pictureSequences(), t, steps, 1, 99, true),
+        this._normalizeSequences(this.pictureSequences(), t, steps, 1, 99, true, DEFAULT_PICTURE_ROWS),
       );
       this.pictureSequences.set(next);
     } else {
       const t = Math.max(1, this.trials());
       const steps = Math.max(1, this.stepsNum());
       const next = this._syncAllTrialsToMaster(
-        this._normalizeSequences(this.locationSequences(), t, steps, 1, 16, true),
+        this._normalizeSequences(this.locationSequences(), t, steps, 1, 16, true, DEFAULT_LOCATION_ROWS),
       );
       this.locationSequences.set(next);
     }
@@ -1825,7 +1833,9 @@ export class AppComponent {
     const pic = Math.max(1, Math.min(99, Number(value) || 1));
     const t = Math.max(1, this.trials());
     const steps = Math.max(1, this.stepsNum());
-    let next = this._normalizeSequences(this.pictureSequences(), t, steps, 1, 99, true).map((row) => [...row]);
+    let next = this._normalizeSequences(this.pictureSequences(), t, steps, 1, 99, true, DEFAULT_PICTURE_ROWS).map(
+      (row) => [...row],
+    );
     if (!next[trialIdx]) return;
     next[trialIdx][stepIdx] = pic;
     if (this.sameSequenceForAllTrials()) next = this._syncAllTrialsToMaster(next);
@@ -1887,7 +1897,9 @@ export class AppComponent {
     const cell = Math.max(1, Math.min(16, Number(value) || 1));
     const t = Math.max(1, this.trials());
     const steps = Math.max(1, this.stepsNum());
-    let next = this._normalizeSequences(this.locationSequences(), t, steps, 1, 16, true).map((row) => [...row]);
+    let next = this._normalizeSequences(this.locationSequences(), t, steps, 1, 16, true, DEFAULT_LOCATION_ROWS).map(
+      (row) => [...row],
+    );
     if (!next[trialIdx]) return;
     next[trialIdx][stepIdx] = cell;
     if (this.sameSequenceForAllTrials()) next = this._syncAllTrialsToMaster(next);
@@ -1910,15 +1922,17 @@ export class AppComponent {
     minVal: number,
     maxVal: number,
     uniquePerRow = false,
+    seedRows: number[][] = [],
   ) {
     const safeVal = (x: number | undefined, fallback: number) => {
       const n = Number(x);
       if (!Number.isFinite(n)) return fallback;
       return Math.max(minVal, Math.min(maxVal, Math.floor(n)));
     };
+    const seed = seedRows.length ? seedRows : seqs;
     const out: number[][] = [];
     for (let i = 0; i < trials; i++) {
-      const prev = seqs[i] ?? seqs[seqs.length - 1] ?? [];
+      const prev = seqs[i] ?? seed[i % seed.length] ?? [];
       const row: number[] = [];
       for (let s = 0; s < steps; s++) {
         if (prev[s] !== undefined && Number.isFinite(Number(prev[s]))) {

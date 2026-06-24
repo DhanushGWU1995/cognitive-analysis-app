@@ -910,25 +910,33 @@ input {
 }
 
 .seq-table {
-  --seq-step-w: 104px;
-  --seq-trial-w: 48px;
-  --seq-copy-w: 68px;
+  --seq-step-min: 84px;
+  --seq-trial-w: 52px;
+  --seq-copy-w: 72px;
   display: grid;
-  width: max-content;
-  max-width: 100%;
+  width: 100%;
 }
 
 .seq-table--synced {
-  grid-template-columns: var(--seq-trial-w) repeat(var(--seq-steps, 2), var(--seq-step-w));
+  grid-template-columns: var(--seq-trial-w) repeat(var(--seq-steps, 2), minmax(var(--seq-step-min), 1fr));
+  min-width: max(100%, calc(var(--seq-trial-w) + var(--seq-steps, 2) * var(--seq-step-min)));
 }
 
 .seq-table--per-trial {
-  grid-template-columns: var(--seq-trial-w) var(--seq-copy-w) repeat(var(--seq-steps, 2), var(--seq-step-w));
+  grid-template-columns:
+    var(--seq-trial-w)
+    var(--seq-copy-w)
+    repeat(var(--seq-steps, 2), minmax(var(--seq-step-min), 1fr));
+  min-width: max(
+    100%,
+    calc(var(--seq-trial-w) + var(--seq-copy-w) + var(--seq-steps, 2) * var(--seq-step-min))
+  );
 }
 
 .seq-table--dense {
-  --seq-trial-w: 44px;
-  --seq-copy-w: 64px;
+  --seq-step-min: 72px;
+  --seq-trial-w: 48px;
+  --seq-copy-w: 68px;
 }
 
 .seq-row {
@@ -939,7 +947,7 @@ input {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 58px;
+  min-height: 56px;
   padding: 8px;
   border-bottom: 1px solid rgba(15, 23, 42, 0.08);
   border-right: 1px solid rgba(15, 23, 42, 0.08);
@@ -947,22 +955,21 @@ input {
 }
 
 .seq-table--dense .seq-row .cell {
-  min-height: 52px;
+  min-height: 50px;
   padding: 6px;
 }
 
 .seq-row .step-col {
-  justify-content: stretch;
-  width: var(--seq-step-w);
-  min-width: var(--seq-step-w);
-  max-width: var(--seq-step-w);
+  min-width: 0;
+  padding: 8px;
 }
 
 .seq-row .cell.h {
   position: sticky;
   top: 0;
   z-index: 4;
-  min-height: 58px;
+  min-height: 56px;
+  padding: 8px 6px;
   background: linear-gradient(
     90deg,
     rgba(99, 102, 241, 0.18) 0%,
@@ -1033,13 +1040,32 @@ input {
   transform: translateY(0);
 }
 
+.pick-loc {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  padding: 6px 10px;
+  cursor: pointer;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(238, 242, 255, 0.92) 100%);
+}
+
 .pick-visual {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: flex-start;
   gap: 8px;
+  width: 100%;
+  min-width: 0;
   padding: 6px 8px;
   cursor: pointer;
+}
+
+.seq-table--dense .pick-loc {
+  gap: 6px;
+  padding: 4px 6px;
 }
 
 .seq-table--dense .pick-visual {
@@ -1054,21 +1080,6 @@ input {
 
 .seq-table--dense .pick-label {
   font-size: 11px;
-}
-
-.pick-loc {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 6px 10px;
-  cursor: pointer;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(238, 242, 255, 0.92) 100%);
-}
-
-.seq-table--dense .pick-loc {
-  gap: 6px;
-  padding: 4px 6px;
 }
 
 .seq-table--dense .loc-pill {

@@ -845,17 +845,25 @@ input {
   cursor: pointer;
 }
 
-.seq-copy-col {
-  min-width: 118px;
-  max-width: 132px;
+.seq-copy-prev {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(79, 70, 229, 0.28);
+  background: rgba(99, 102, 241, 0.08);
+  color: #4338ca;
+  font-size: 10.5px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  white-space: nowrap;
 }
 
-.seq-copy-prev {
-  height: 32px;
-  padding: 0 10px;
-  font-size: 11px;
-  font-weight: 800;
-  white-space: nowrap;
+.seq-copy-prev:hover {
+  background: rgba(99, 102, 241, 0.14);
 }
 
 .cell.trial.synced {
@@ -871,6 +879,10 @@ input {
 .seq-table {
   margin-top: 10px;
   overflow: auto;
+  display: table;
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
   border-radius: 14px;
   border: 1px solid rgba(15, 23, 42, 0.12);
   background: rgba(255, 255, 255, 0.82);
@@ -878,9 +890,7 @@ input {
 }
 
 .seq-row {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(110px, 1fr);
+  display: table-row;
 }
 
 .seq-row.header {
@@ -896,6 +906,8 @@ input {
 }
 
 .seq-row .cell {
+  display: table-cell;
+  vertical-align: middle;
   padding: 10px;
   border-bottom: 1px solid rgba(15, 23, 42, 0.08);
   border-right: 1px solid rgba(15, 23, 42, 0.08);
@@ -920,6 +932,19 @@ input {
 
 .cell.trial {
   font-weight: 900;
+}
+
+.cell.trial-col {
+  width: 118px;
+  min-width: 118px;
+  max-width: 118px;
+  text-align: center;
+}
+
+.trial-num {
+  display: block;
+  font-size: 16px;
+  line-height: 1;
 }
 
 .pick {

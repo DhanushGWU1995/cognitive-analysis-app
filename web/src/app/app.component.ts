@@ -373,12 +373,15 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
                 </div>
                 <button class="btn ghost" type="button" (click)="closePicPicker()">Close</button>
               </div>
+              <p class="muted small pic-picker-hint">
+                Tap any picture to assign it. Duplicate pictures in the same trial are checked when you tap Start.
+              </p>
               <div class="picker-grid">
                 <button
                   class="picker-item"
                   *ngFor="let pid of picIds"
                   type="button"
-                  [disabled]="isPicDisabledInTrial(picPickerTrial(), picPickerStep(), pid)"
+                  [class.pic-used]="isPicUsedElsewhereInTrial(picPickerTrial(), picPickerStep(), pid)"
                   (click)="pickPic(pid)"
                 >
                   <img class="picker-img" [src]="'assets/pics/' + pad3(pid) + '.jpg'" alt="" loading="lazy" />
@@ -460,12 +463,15 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
                 </div>
                 <button class="btn ghost" type="button" (click)="closeLocPicker()">Close</button>
               </div>
+              <p class="muted small loc-picker-hint">
+                Tap any cell to assign it. Duplicate cells in the same trial are checked when you tap Start.
+              </p>
               <div class="loc-grid">
                 <button
                   class="loc-cell"
                   *ngFor="let cell of [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]"
                   type="button"
-                  [disabled]="isLocDisabledInTrial(locPickerTrial(), locPickerStep(), cell)"
+                  [class.loc-used]="isLocUsedElsewhereInTrial(locPickerTrial(), locPickerStep(), cell)"
                   (click)="pickLoc(cell)"
                 >
                   {{ cell }}
@@ -477,6 +483,24 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
           <div class="actions">
             <button class="btn ghost" (click)="screen.set('home')">Back</button>
             <button class="btn primary" [disabled]="!canStart()" (click)="start()">Start</button>
+          </div>
+
+          <div class="picker-overlay" *ngIf="sequenceValidationPromptOpen()" (click)="dismissSequenceValidationPrompt()">
+            <div class="picker same-seq-prompt" (click)="$event.stopPropagation()">
+              <div class="picker-top">
+                <div class="picker-title">Fix sequence errors</div>
+              </div>
+              <p class="same-seq-prompt-copy">
+                Fix the trial sequence(s) below, then tap <b>Start</b> again. The session will not begin until every
+                step in each trial uses a different {{ isSpatialTask() ? 'grid cell' : 'picture' }}.
+              </p>
+              <ul class="validation-error-list">
+                <li *ngFor="let err of sequenceValidationErrors()">{{ err }}</li>
+              </ul>
+              <div class="same-seq-prompt-actions">
+                <button class="btn primary" type="button" (click)="dismissSequenceValidationPrompt()">OK</button>
+              </div>
+            </div>
           </div>
 
           <div class="picker-overlay" *ngIf="sameSequencePromptOpen()" (click)="dismissSameSequencePrompt()">
@@ -800,6 +824,8 @@ export class AppComponent {
   readonly locPickerStep = signal(0);
   readonly sameSequencePromptOpen = signal(false);
   private pendingStartAfterSameSequencePrompt = false;
+  readonly sequenceValidationPromptOpen = signal(false);
+  readonly sequenceValidationErrors = signal<string[]>([]);
   readonly sequenceChangedPromptOpen = signal(false);
 
   readonly expectedNext = computed(() => {
@@ -849,13 +875,13 @@ export class AppComponent {
       const syncAll = this.sameSequenceForAllTrials();
       if (task === this.TaskType.Picture) {
         const cur = untracked(() => this.pictureSequences());
-        let next = this._normalizeSequences(cur, t, steps, 1, 99, true, DEFAULT_PICTURE_ROWS);
+        let next = this._normalizeSequences(cur, t, steps, 1, 99, DEFAULT_PICTURE_ROWS);
         if (syncAll) next = this._syncAllTrialsToMaster(next);
         this.pictureSequences.set(next);
         untracked(() => this._maybePromptSameSequenceForAllTrials(false));
       } else {
         const cur = untracked(() => this.locationSequences());
-        let next = this._normalizeSequences(cur, t, steps, 1, 16, true, DEFAULT_LOCATION_ROWS);
+        let next = this._normalizeSequences(cur, t, steps, 1, 16, DEFAULT_LOCATION_ROWS);
         if (syncAll) next = this._syncAllTrialsToMaster(next);
         this.locationSequences.set(next);
         untracked(() => this._maybePromptSameSequenceForAllTrials(false));
@@ -901,6 +927,8 @@ export class AppComponent {
     this.sameSequenceForAllTrials.set(false);
     this.sameSequencePromptOpen.set(false);
     this.pendingStartAfterSameSequencePrompt = false;
+    this.sequenceValidationPromptOpen.set(false);
+    this.sequenceValidationErrors.set([]);
     this.locationSequences.set(DEFAULT_LOCATION_ROWS.map((row) => [...row]));
     this.pictureSequences.set(DEFAULT_PICTURE_ROWS.map((row) => [...row]));
     this.screen.set('setup');
@@ -968,14 +996,14 @@ export class AppComponent {
       const t = Math.max(1, this.trials());
       const steps = Math.max(1, this.stepsNum());
       const next = this._syncAllTrialsToMaster(
-        this._normalizeSequences(this.pictureSequences(), t, steps, 1, 99, true, DEFAULT_PICTURE_ROWS),
+        this._normalizeSequences(this.pictureSequences(), t, steps, 1, 99, DEFAULT_PICTURE_ROWS),
       );
       this.pictureSequences.set(next);
     } else {
       const t = Math.max(1, this.trials());
       const steps = Math.max(1, this.stepsNum());
       const next = this._syncAllTrialsToMaster(
-        this._normalizeSequences(this.locationSequences(), t, steps, 1, 16, true, DEFAULT_LOCATION_ROWS),
+        this._normalizeSequences(this.locationSequences(), t, steps, 1, 16, DEFAULT_LOCATION_ROWS),
       );
       this.locationSequences.set(next);
     }
@@ -989,8 +1017,55 @@ export class AppComponent {
     }
     if (this.pendingStartAfterSameSequencePrompt) {
       this.pendingStartAfterSameSequencePrompt = false;
-      this._startSession();
+      if (this._passesSequenceValidation()) {
+        this._startSession();
+      }
     }
+  }
+
+  dismissSequenceValidationPrompt() {
+    this.sequenceValidationPromptOpen.set(false);
+  }
+
+  private _passesSequenceValidation() {
+    const errors = this._collectSequenceValidationErrors();
+    if (!errors.length) return true;
+    this.sequenceValidationErrors.set(errors);
+    this.sequenceValidationPromptOpen.set(true);
+    return false;
+  }
+
+  private _collectSequenceValidationErrors() {
+    const trials = Math.max(1, this.trials());
+    const steps = Math.max(1, this.stepsNum());
+    const isSpatial = this.isSpatialTask();
+    const rows = this._setupSequences()
+      .slice(0, trials)
+      .map((row) => row.slice(0, steps));
+    const errors: string[] = [];
+    const syncAll = this.sameSequenceForAllTrials();
+
+    for (let i = 0; i < rows.length; i++) {
+      if (syncAll && i > 0) continue;
+      const row = rows[i];
+      const trialLabel = syncAll ? 'All trials' : `Trial ${i + 1}`;
+      const byValue = new Map<number, number[]>();
+      for (let s = 0; s < row.length; s++) {
+        const value = row[s];
+        const stepsForValue = byValue.get(value) ?? [];
+        stepsForValue.push(s + 1);
+        byValue.set(value, stepsForValue);
+      }
+      for (const [value, stepNums] of byValue) {
+        if (stepNums.length < 2) continue;
+        const label = isSpatial ? `Cell ${value}` : `Picture ${this.pad3(value)}`;
+        const stepList = stepNums.join(', ');
+        errors.push(
+          `${trialLabel}: ${label} is used in steps ${stepList}. Each step must use a different ${isSpatial ? 'cell' : 'picture'}.`,
+        );
+      }
+    }
+    return errors;
   }
 
   private _setupSequences() {
@@ -1024,6 +1099,7 @@ export class AppComponent {
 
   start() {
     if (!this.canStart()) return;
+    if (!this._passesSequenceValidation()) return;
     if (!this.sameSequenceForAllTrials() && this._allTrialSequencesMatch()) {
       this._maybePromptSameSequenceForAllTrials(true);
       return;
@@ -1931,7 +2007,7 @@ export class AppComponent {
     const pic = Math.max(1, Math.min(99, Number(value) || 1));
     const t = Math.max(1, this.trials());
     const steps = Math.max(1, this.stepsNum());
-    let next = this._normalizeSequences(this.pictureSequences(), t, steps, 1, 99, true, DEFAULT_PICTURE_ROWS).map(
+    let next = this._normalizeSequences(this.pictureSequences(), t, steps, 1, 99, DEFAULT_PICTURE_ROWS).map(
       (row) => [...row],
     );
     if (!next[trialIdx]) return;
@@ -1958,7 +2034,7 @@ export class AppComponent {
     this.picPickerOpen.set(false);
   }
 
-  isPicDisabledInTrial(trialIdx: number, stepIdx: number, pid: number) {
+  isPicUsedElsewhereInTrial(trialIdx: number, stepIdx: number, pid: number) {
     const row = this.pictureSequences()[trialIdx] ?? [];
     for (let i = 0; i < row.length; i++) {
       if (i !== stepIdx && row[i] === pid) return true;
@@ -1983,7 +2059,7 @@ export class AppComponent {
     this.locPickerOpen.set(false);
   }
 
-  isLocDisabledInTrial(trialIdx: number, stepIdx: number, cell: number) {
+  isLocUsedElsewhereInTrial(trialIdx: number, stepIdx: number, cell: number) {
     const row = this.locationSequences()[trialIdx] ?? [];
     for (let i = 0; i < row.length; i++) {
       if (i !== stepIdx && row[i] === cell) return true;
@@ -1995,7 +2071,7 @@ export class AppComponent {
     const cell = Math.max(1, Math.min(16, Number(value) || 1));
     const t = Math.max(1, this.trials());
     const steps = Math.max(1, this.stepsNum());
-    let next = this._normalizeSequences(this.locationSequences(), t, steps, 1, 16, true, DEFAULT_LOCATION_ROWS).map(
+    let next = this._normalizeSequences(this.locationSequences(), t, steps, 1, 16, DEFAULT_LOCATION_ROWS).map(
       (row) => [...row],
     );
     if (!next[trialIdx]) return;
@@ -2019,7 +2095,6 @@ export class AppComponent {
     steps: number,
     minVal: number,
     maxVal: number,
-    uniquePerRow = false,
     seedRows: number[][] = [],
   ) {
     const safeVal = (x: number | undefined, fallback: number) => {
@@ -2037,14 +2112,6 @@ export class AppComponent {
           row.push(safeVal(prev[s], minVal));
         } else {
           row.push(this._firstUnusedInRange(row, minVal, maxVal));
-        }
-      }
-      if (uniquePerRow) {
-        for (let s = 0; s < row.length; s++) {
-          const earlier = row.slice(0, s);
-          if (earlier.includes(row[s])) {
-            row[s] = this._firstUnusedInRange(earlier, minVal, maxVal);
-          }
         }
       }
       out.push(row);

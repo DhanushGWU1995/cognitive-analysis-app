@@ -316,7 +316,7 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
               </div>
             </div>
 
-            <p class="seq-scroll-hint muted small" *ngIf="stepsNum() > 6">
+            <p class="seq-scroll-hint muted small" *ngIf="showSeqScrollHint()">
               Scroll horizontally to see all {{ stepsNum() }} steps. Trial and copy columns stay pinned on the left.
             </p>
             <div class="seq-table-wrap">
@@ -326,6 +326,7 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
                 [class.seq-table--synced]="sameSequenceForAllTrials()"
                 [class.seq-table--dense]="stepsNum() >= 8"
                 [style.--seq-steps]="stepsNum()"
+                [style.--seq-step-w.px]="stepColumnWidthPx()"
               >
                 <div class="seq-row header">
                   <div class="cell h trial-col">{{ sameSequenceForAllTrials() ? 'All trials' : 'Trial' }}</div>
@@ -434,7 +435,7 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
               </div>
             </div>
 
-            <p class="seq-scroll-hint muted small" *ngIf="stepsNum() > 6">
+            <p class="seq-scroll-hint muted small" *ngIf="showSeqScrollHint()">
               Scroll horizontally to see all {{ stepsNum() }} steps. Trial and copy columns stay pinned on the left.
             </p>
             <div class="seq-table-wrap">
@@ -444,6 +445,7 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
                 [class.seq-table--synced]="sameSequenceForAllTrials()"
                 [class.seq-table--dense]="stepsNum() >= 8"
                 [style.--seq-steps]="stepsNum()"
+                [style.--seq-step-w.px]="stepColumnWidthPx()"
               >
                 <div class="seq-row header">
                   <div class="cell h trial-col">{{ sameSequenceForAllTrials() ? 'All trials' : 'Trial' }}</div>
@@ -1045,6 +1047,19 @@ export class AppComponent {
   setStepsNum(raw: number) {
     const max = this.maxStepsNum();
     this.stepsNum.set(Math.max(1, Math.min(max, Number(raw) || 1)));
+  }
+
+  /** Equal width for every step column; shrinks as StepsNum grows, scrolls at the minimum. */
+  stepColumnWidthPx() {
+    const steps = Math.max(1, this.stepsNum());
+    const pinned = this.sameSequenceForAllTrials() ? 48 : 48 + 68;
+    const budget = 960;
+    const ideal = Math.floor((budget - pinned) / steps);
+    return Math.max(72, Math.min(112, ideal));
+  }
+
+  showSeqScrollHint() {
+    return this.stepsNum() > 7 || this.stepColumnWidthPx() <= 72;
   }
 
   setSameSequenceForAllTrials(on: boolean) {

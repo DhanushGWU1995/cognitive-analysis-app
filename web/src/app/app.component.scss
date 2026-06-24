@@ -910,31 +910,23 @@ input {
 }
 
 .seq-table {
-  --seq-step-min: 88px;
+  --seq-step-w: 104px;
   --seq-trial-w: 48px;
   --seq-copy-w: 68px;
   display: grid;
-  width: 100%;
+  width: max-content;
+  max-width: 100%;
 }
 
 .seq-table--synced {
-  grid-template-columns: var(--seq-trial-w) repeat(var(--seq-steps, 2), minmax(var(--seq-step-min), 1fr));
-  min-width: max(100%, calc(var(--seq-trial-w) + var(--seq-steps, 2) * var(--seq-step-min)));
+  grid-template-columns: var(--seq-trial-w) repeat(var(--seq-steps, 2), var(--seq-step-w));
 }
 
 .seq-table--per-trial {
-  grid-template-columns:
-    var(--seq-trial-w)
-    var(--seq-copy-w)
-    repeat(var(--seq-steps, 2), minmax(var(--seq-step-min), 1fr));
-  min-width: max(
-    100%,
-    calc(var(--seq-trial-w) + var(--seq-copy-w) + var(--seq-steps, 2) * var(--seq-step-min))
-  );
+  grid-template-columns: var(--seq-trial-w) var(--seq-copy-w) repeat(var(--seq-steps, 2), var(--seq-step-w));
 }
 
 .seq-table--dense {
-  --seq-step-min: 72px;
   --seq-trial-w: 44px;
   --seq-copy-w: 64px;
 }
@@ -961,13 +953,16 @@ input {
 
 .seq-row .step-col {
   justify-content: stretch;
+  width: var(--seq-step-w);
+  min-width: var(--seq-step-w);
+  max-width: var(--seq-step-w);
 }
 
 .seq-row .cell.h {
   position: sticky;
   top: 0;
   z-index: 4;
-  min-height: 42px;
+  min-height: 58px;
   background: linear-gradient(
     90deg,
     rgba(99, 102, 241, 0.18) 0%,

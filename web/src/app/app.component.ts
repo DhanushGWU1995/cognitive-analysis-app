@@ -316,16 +316,18 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
               </div>
             </div>
 
-            <p class="seq-scroll-hint muted small" *ngIf="stepsNum() > 8">
-              Scroll horizontally to see all {{ stepsNum() }} steps. Trial and copy columns stay pinned on the left.
+            <p class="seq-scroll-hint muted small" *ngIf="stepsNum() > 6">
+              {{ stepsNum() }} steps — scroll horizontally to see all columns. Trial and copy stay pinned on the left.
             </p>
             <div class="seq-table-wrap">
               <div
                 class="seq-table"
                 [class.seq-table--per-trial]="!sameSequenceForAllTrials()"
                 [class.seq-table--synced]="sameSequenceForAllTrials()"
+                [class.seq-table--equal-cols]="useEqualSeqColumns()"
                 [class.seq-table--dense]="stepsNum() >= 8"
                 [style.--seq-cols]="seqTableCols()"
+                [style.--seq-steps]="stepsNum()"
               >
                 <div class="seq-row header">
                   <div class="cell h trial-col">{{ sameSequenceForAllTrials() ? 'All trials' : 'Trial' }}</div>
@@ -434,16 +436,18 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
               </div>
             </div>
 
-            <p class="seq-scroll-hint muted small" *ngIf="stepsNum() > 8">
-              Scroll horizontally to see all {{ stepsNum() }} steps. Trial and copy columns stay pinned on the left.
+            <p class="seq-scroll-hint muted small" *ngIf="stepsNum() > 6">
+              {{ stepsNum() }} steps — scroll horizontally to see all columns. Trial and copy stay pinned on the left.
             </p>
             <div class="seq-table-wrap">
               <div
                 class="seq-table"
                 [class.seq-table--per-trial]="!sameSequenceForAllTrials()"
                 [class.seq-table--synced]="sameSequenceForAllTrials()"
+                [class.seq-table--equal-cols]="useEqualSeqColumns()"
                 [class.seq-table--dense]="stepsNum() >= 8"
                 [style.--seq-cols]="seqTableCols()"
+                [style.--seq-steps]="stepsNum()"
               >
                 <div class="seq-row header">
                   <div class="cell h trial-col">{{ sameSequenceForAllTrials() ? 'All trials' : 'Trial' }}</div>
@@ -1049,6 +1053,11 @@ export class AppComponent {
 
   seqTableCols() {
     return this.sameSequenceForAllTrials() ? this.stepsNum() + 1 : this.stepsNum() + 2;
+  }
+
+  /** Equal-width trial/copy/step columns when the table is still easy to read. */
+  useEqualSeqColumns() {
+    return this.stepsNum() <= 6;
   }
 
   setSameSequenceForAllTrials(on: boolean) {

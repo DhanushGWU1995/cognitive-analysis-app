@@ -605,7 +605,6 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
               class="step-progress"
               *ngIf="
                 phase() === 'test' &&
-                !showCongrats() &&
                 testMode() !== TestMode.FreeRecall &&
                 (feedbackStepNumber() || feedbackSmiley())
               "
@@ -636,7 +635,6 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
                 *ngIf="
                   phase() === 'test' &&
                   testMode() !== TestMode.FreeRecall &&
-                  !showCongrats() &&
                   gridStepBadge(cell) &&
                   (feedbackStepNumber() || feedbackSmiley())
                 "
@@ -1672,9 +1670,10 @@ export class AppComponent {
     return isFirstTap;
   }
 
-  /** Tap mode on: record every press (including repeat wrong taps), matching legacy report rows. */
-  private _shouldIgnoreRepeatTap(_choice: number, _expected: number): boolean {
-    return false;
+  /** Standard test: ignore repeat taps on already-pressed targets (legacy tap_mode off). */
+  private _shouldIgnoreRepeatTap(choice: number, expected: number): boolean {
+    if (this.testMode() !== this.TestMode.Standard) return false;
+    return this.pressed().includes(choice) && choice !== expected;
   }
 
   private _legacyExpectedAtProgress(sequence: number[], correctBefore: number) {
@@ -1862,7 +1861,7 @@ export class AppComponent {
           this._legacyBool(meta.feedbackBorder),
           this._legacyBool(meta.playSound),
           this._legacyBool(meta.freeRecall),
-          'True',
+          this._legacyBool(this.testMode() !== this.TestMode.Standard),
           this._legacyBool(meta.progressCorrectOnly),
         ]);
       }

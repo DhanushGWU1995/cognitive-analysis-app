@@ -1007,6 +1007,24 @@ input {
   font-weight: 1000;
 }
 
+.same-seq-prompt {
+  width: min(520px, 92vw);
+  padding: 4px 0 16px;
+}
+
+.same-seq-prompt-copy {
+  margin: 0;
+  padding: 16px 18px 8px;
+  line-height: 1.5;
+  color: rgba(15, 23, 42, 0.82);
+}
+
+.same-seq-prompt-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px 18px 4px;
+}
+
 .picker-grid {
   padding: 12px;
   overflow: auto;

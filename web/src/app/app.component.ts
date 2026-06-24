@@ -606,13 +606,7 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
           <button
             type="button"
             class="study-replay-fab"
-            *ngIf="
-              sameSequenceForAllTrials() &&
-              phase() === 'test' &&
-              !showCongrats() &&
-              !automaticPlayback() &&
-              !isDemoTrial()
-            "
+            *ngIf="showStudyReplayFab()"
             (click)="teacherReplayStudy()"
           >
             Show study again
@@ -1081,9 +1075,18 @@ export class AppComponent {
   }
 
   teacherReplayStudy() {
-    if (this.phase() !== 'test' || this.showCongrats() || this.isDemoTrial()) return;
+    if (!this.showStudyReplayFab()) return;
     this.studyReturnToTest.set(true);
     this._startStudyPlayback();
+  }
+
+  showStudyReplayFab() {
+    return (
+      this.phase() === 'test' &&
+      !this.showCongrats() &&
+      !this.automaticPlayback() &&
+      !this.isDemoTrial()
+    );
   }
 
   continueToTest() {

@@ -23,8 +23,6 @@ type TrialReportMeta = {
   itiSeconds: number;
   distractorsN: number;
   feedbackBorder: boolean;
-  automaticDemo: boolean;
-  demoTrials: number;
   freeRecall: boolean;
   progressCorrectOnly: boolean;
   playSound: boolean;
@@ -76,10 +74,6 @@ const LEGACY_REPORT_HEADER = [
   'FreeRecall',
   'TapMode',
   'ProgressCorrectOnly',
-  'Automatic',
-  'DemonstrationNum',
-  '',
-  'Notes',
 ] as const;
 
 const DEFAULT_LOCATION_ROWS: number[][] = [
@@ -1580,13 +1574,11 @@ export class AppComponent {
       itiSeconds: Math.max(1, this.itiSeconds()),
       distractorsN: Math.max(0, this.distractorsN()),
       feedbackBorder: this.feedbackBorder(),
-      automaticDemo: this.automaticDemo(),
-      demoTrials: Math.max(0, this.demoTrials()),
       freeRecall: testMode === this.TestMode.FreeRecall,
       progressCorrectOnly: testMode === this.TestMode.AdvanceWhenCorrect,
       playSound: testMode !== this.TestMode.FreeRecall,
-      listPics: this._legacyListPicsForList(taskType, trialIndex, trialsNum),
-      listLocations: this._legacyListLocationsForList(taskType, trialIndex, trialsNum),
+      listPics: this._legacyListPicsForTrial(taskType, sequence),
+      listLocations: this._legacyListLocationsForTrial(taskType, sequence),
     };
   }
 
@@ -1794,52 +1786,20 @@ export class AppComponent {
     return letters[choice] ?? `X${choice}`;
   }
 
-  /** Picture filenames / spatial filler mode for the whole stimulus list block. */
-  private _legacyListPicsForList(
-    taskType: 'location' | 'picture',
-    trialIndex: number,
-    trialsNum: number,
-  ) {
+  /** Target picture filenames for this trial's sequence (legacy ListPics). */
+  private _legacyListPicsForTrial(taskType: 'location' | 'picture', sequence: number[]) {
     if (taskType === 'location') {
       return 'random/identical';
     }
-    const start = Math.floor(trialIndex / trialsNum) * trialsNum;
-    const end = Math.min(start + trialsNum, this.pictureSequences().length);
-    const seen = new Set<number>();
-    const pics: number[] = [];
-    for (const seq of this.pictureSequences().slice(start, end)) {
-      for (const id of seq) {
-        if (!seen.has(id)) {
-          seen.add(id);
-          pics.push(id);
-        }
-      }
-    }
-    return pics.map((id) => this._legacyPicFileName(id)).join(',');
+    return sequence.map((id) => this._legacyPicFileName(id)).join(',');
   }
 
-  /** Grid cells used across all trials in the current stimulus list block. */
-  private _legacyListLocationsForList(
-    taskType: 'location' | 'picture',
-    trialIndex: number,
-    trialsNum: number,
-  ) {
+  /** Target grid cells for this trial's sequence (legacy ListLocations). */
+  private _legacyListLocationsForTrial(taskType: 'location' | 'picture', sequence: number[]) {
     if (taskType !== 'location') {
       return 'random';
     }
-    const start = Math.floor(trialIndex / trialsNum) * trialsNum;
-    const end = Math.min(start + trialsNum, this.locationSequences().length);
-    const seen = new Set<number>();
-    const cells: number[] = [];
-    for (const seq of this.locationSequences().slice(start, end)) {
-      for (const cell of seq) {
-        if (!seen.has(cell)) {
-          seen.add(cell);
-          cells.push(cell);
-        }
-      }
-    }
-    return cells.join(',');
+    return sequence.join(',');
   }
 
   private _legacySequenceBy(taskType: 'location' | 'picture') {
@@ -1855,10 +1815,6 @@ export class AppComponent {
     return isLastPress ? 'True' : 'bl';
   }
 
-  private _legacyNotes(isDemo: boolean) {
-    return isDemo ? 'demo' : '-';
-  }
-
   private _buildLegacyReportRows(): string[][] {
     const subject = this.subjectId().trim();
     const date = this._legacyDate();
@@ -1870,7 +1826,6 @@ export class AppComponent {
       const recordable = trial.touches.filter((t) => !t.ignored && !t.automatic);
       const pressesSoFar: number[] = [];
       const meta = trial.report;
-      const notes = this._legacyNotes(trial.isDemo);
 
       for (let i = 0; i < recordable.length; i++) {
         const touch = recordable[i];
@@ -1909,10 +1864,6 @@ export class AppComponent {
           this._legacyBool(meta.freeRecall),
           'True',
           this._legacyBool(meta.progressCorrectOnly),
-          this._legacyBool(meta.automaticDemo),
-          String(meta.demoTrials),
-          '',
-          notes,
         ]);
       }
     }

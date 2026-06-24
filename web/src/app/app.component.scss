@@ -976,7 +976,7 @@ input {
 .seq-row .cell.h {
   position: sticky;
   top: 0;
-  z-index: 4;
+  z-index: 2;
   min-height: 56px;
   padding: 8px 6px;
   background: linear-gradient(
@@ -985,32 +985,6 @@ input {
     rgba(236, 72, 153, 0.14) 45%,
     rgba(245, 158, 11, 0.14) 100%
   );
-}
-
-.seq-row .cell.trial-col {
-  position: sticky;
-  left: 0;
-  z-index: 3;
-  box-shadow: 2px 0 8px rgba(15, 23, 42, 0.06);
-}
-
-.seq-table--per-trial.seq-table--equal-cols .cell.seq-copy-col {
-  position: sticky;
-  left: calc(100% / var(--seq-cols, 4));
-  z-index: 3;
-  box-shadow: 2px 0 8px rgba(15, 23, 42, 0.06);
-}
-
-.seq-table--per-trial:not(.seq-table--equal-cols) .cell.seq-copy-col {
-  position: sticky;
-  left: var(--seq-trial-w);
-  z-index: 3;
-  box-shadow: 2px 0 8px rgba(15, 23, 42, 0.06);
-}
-
-.seq-row .cell.h.trial-col,
-.seq-table--per-trial .cell.h.seq-copy-col {
-  z-index: 6;
 }
 
 .cell.h {

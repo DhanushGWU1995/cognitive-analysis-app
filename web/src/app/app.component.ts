@@ -317,7 +317,7 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
             </div>
 
             <p class="seq-scroll-hint muted small" *ngIf="stepsNum() > 6">
-              {{ stepsNum() }} steps — scroll horizontally to see all columns. Trial and copy stay pinned on the left.
+              {{ stepsNum() }} steps — scroll horizontally to see all columns.
             </p>
             <div class="seq-table-wrap">
               <div
@@ -437,7 +437,7 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
             </div>
 
             <p class="seq-scroll-hint muted small" *ngIf="stepsNum() > 6">
-              {{ stepsNum() }} steps — scroll horizontally to see all columns. Trial and copy stay pinned on the left.
+              {{ stepsNum() }} steps — scroll horizontally to see all columns.
             </p>
             <div class="seq-table-wrap">
               <div

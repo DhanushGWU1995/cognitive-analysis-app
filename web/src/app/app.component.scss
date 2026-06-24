@@ -910,33 +910,15 @@ input {
 }
 
 .seq-table {
-  --seq-step-min: 84px;
-  --seq-trial-w: 52px;
-  --seq-copy-w: 72px;
+  --seq-col-min: 88px;
   display: grid;
   width: 100%;
-}
-
-.seq-table--synced {
-  grid-template-columns: var(--seq-trial-w) repeat(var(--seq-steps, 2), minmax(var(--seq-step-min), 1fr));
-  min-width: max(100%, calc(var(--seq-trial-w) + var(--seq-steps, 2) * var(--seq-step-min)));
-}
-
-.seq-table--per-trial {
-  grid-template-columns:
-    var(--seq-trial-w)
-    var(--seq-copy-w)
-    repeat(var(--seq-steps, 2), minmax(var(--seq-step-min), 1fr));
-  min-width: max(
-    100%,
-    calc(var(--seq-trial-w) + var(--seq-copy-w) + var(--seq-steps, 2) * var(--seq-step-min))
-  );
+  grid-template-columns: repeat(var(--seq-cols, 4), minmax(var(--seq-col-min), 1fr));
+  min-width: max(100%, calc(var(--seq-cols, 4) * var(--seq-col-min)));
 }
 
 .seq-table--dense {
-  --seq-step-min: 72px;
-  --seq-trial-w: 48px;
-  --seq-copy-w: 68px;
+  --seq-col-min: 76px;
 }
 
 .seq-row {
@@ -987,7 +969,7 @@ input {
 
 .seq-table--per-trial .cell.seq-copy-col {
   position: sticky;
-  left: var(--seq-trial-w);
+  left: calc(100% / var(--seq-cols, 4));
   z-index: 3;
   box-shadow: 2px 0 8px rgba(15, 23, 42, 0.06);
 }

@@ -312,14 +312,13 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
 
             <div class="seq-table">
               <div class="seq-row header">
-                <div class="cell h">{{ sameSequenceForAllTrials() ? 'All trials' : 'Trial' }}</div>
-                <div class="cell h seq-copy-col" *ngIf="!sameSequenceForAllTrials()">Copy</div>
+                <div class="cell h trial-col">{{ sameSequenceForAllTrials() ? 'All trials' : 'Trial' }}</div>
                 <div class="cell h" *ngFor="let _ of [].constructor(stepsNum()); let si = index">Step {{ si + 1 }}</div>
               </div>
 
               <ng-container *ngIf="sameSequenceForAllTrials(); else picturePerTrialRows">
                 <div class="seq-row">
-                  <div class="cell trial synced">★</div>
+                  <div class="cell trial trial-col synced">★</div>
                   <div class="cell" *ngFor="let __ of [].constructor(stepsNum()); let si = index">
                     <button class="pick pick-visual" type="button" (click)="openPicPicker(0, si)">
                       <img
@@ -335,12 +334,12 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
               </ng-container>
               <ng-template #picturePerTrialRows>
                 <div class="seq-row" *ngFor="let _ of [].constructor(trials()); let ti = index">
-                  <div class="cell trial">{{ ti + 1 }}</div>
-                  <div class="cell seq-copy-col">
+                  <div class="cell trial trial-col">
+                    <span class="trial-num">{{ ti + 1 }}</span>
                     <button
                       *ngIf="ti > 0"
                       type="button"
-                      class="btn ghost seq-copy-prev"
+                      class="seq-copy-prev"
                       (click)="copyPreviousTrialSequence(ti)"
                     >
                       Copy previous
@@ -418,14 +417,13 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
 
             <div class="seq-table">
               <div class="seq-row header">
-                <div class="cell h">{{ sameSequenceForAllTrials() ? 'All trials' : 'Trial' }}</div>
-                <div class="cell h seq-copy-col" *ngIf="!sameSequenceForAllTrials()">Copy</div>
+                <div class="cell h trial-col">{{ sameSequenceForAllTrials() ? 'All trials' : 'Trial' }}</div>
                 <div class="cell h" *ngFor="let _ of [].constructor(stepsNum()); let si = index">Step {{ si + 1 }}</div>
               </div>
 
               <ng-container *ngIf="sameSequenceForAllTrials(); else locationPerTrialRows">
                 <div class="seq-row">
-                  <div class="cell trial synced">★</div>
+                  <div class="cell trial trial-col synced">★</div>
                   <div class="cell" *ngFor="let __ of [].constructor(stepsNum()); let si = index">
                     <button class="pick pick-loc" type="button" (click)="openLocPicker(0, si)">
                       <span class="loc-pill">{{ locationSequences()[0][si] }}</span>
@@ -436,12 +434,12 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
               </ng-container>
               <ng-template #locationPerTrialRows>
                 <div class="seq-row" *ngFor="let _ of [].constructor(trials()); let ti = index">
-                  <div class="cell trial">{{ ti + 1 }}</div>
-                  <div class="cell seq-copy-col">
+                  <div class="cell trial trial-col">
+                    <span class="trial-num">{{ ti + 1 }}</span>
                     <button
                       *ngIf="ti > 0"
                       type="button"
-                      class="btn ghost seq-copy-prev"
+                      class="seq-copy-prev"
                       (click)="copyPreviousTrialSequence(ti)"
                     >
                       Copy previous

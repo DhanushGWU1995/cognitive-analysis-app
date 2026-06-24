@@ -325,7 +325,7 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
                 [class.seq-table--per-trial]="!sameSequenceForAllTrials()"
                 [class.seq-table--synced]="sameSequenceForAllTrials()"
                 [class.seq-table--dense]="stepsNum() >= 8"
-                [style.--seq-steps]="stepsNum()"
+                [style.--seq-cols]="seqTableCols()"
               >
                 <div class="seq-row header">
                   <div class="cell h trial-col">{{ sameSequenceForAllTrials() ? 'All trials' : 'Trial' }}</div>
@@ -443,7 +443,7 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
                 [class.seq-table--per-trial]="!sameSequenceForAllTrials()"
                 [class.seq-table--synced]="sameSequenceForAllTrials()"
                 [class.seq-table--dense]="stepsNum() >= 8"
-                [style.--seq-steps]="stepsNum()"
+                [style.--seq-cols]="seqTableCols()"
               >
                 <div class="seq-row header">
                   <div class="cell h trial-col">{{ sameSequenceForAllTrials() ? 'All trials' : 'Trial' }}</div>
@@ -1045,6 +1045,10 @@ export class AppComponent {
   setStepsNum(raw: number) {
     const max = this.maxStepsNum();
     this.stepsNum.set(Math.max(1, Math.min(max, Number(raw) || 1)));
+  }
+
+  seqTableCols() {
+    return this.sameSequenceForAllTrials() ? this.stepsNum() + 1 : this.stepsNum() + 2;
   }
 
   setSameSequenceForAllTrials(on: boolean) {

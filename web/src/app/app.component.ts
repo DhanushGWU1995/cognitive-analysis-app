@@ -155,8 +155,14 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
               <input type="number" min="1" max="50" [value]="trials()" (input)="trials.set(+$any($event.target).value)" />
             </label>
             <label>
-              <div class="lbl">StepsNum (sequence length)</div>
-              <input type="number" min="1" max="5" [value]="stepsNum()" (input)="stepsNum.set(+$any($event.target).value)" />
+              <div class="lbl">StepsNum (sequence length, max {{ maxStepsNum() }})</div>
+              <input
+                type="number"
+                min="1"
+                [max]="maxStepsNum()"
+                [value]="stepsNum()"
+                (input)="setStepsNum(+$any($event.target).value)"
+              />
             </label>
             <label>
               <div class="lbl">Distractors (N)</div>
@@ -310,43 +316,54 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
               </div>
             </div>
 
-            <div class="seq-table">
-              <div class="seq-row header">
-                <div class="cell h">{{ sameSequenceForAllTrials() ? 'All trials' : 'Trial' }}</div>
-                <div class="cell h seq-copy-col" *ngIf="!sameSequenceForAllTrials()">Copy</div>
-                <div class="cell h" *ngFor="let _ of [].constructor(stepsNum()); let si = index">Step {{ si + 1 }}</div>
-              </div>
-
-              <ng-container *ngIf="sameSequenceForAllTrials(); else picturePerTrialRows">
-                <div class="seq-row">
-                  <div class="cell trial synced">★</div>
-                  <div class="cell" *ngFor="let __ of [].constructor(stepsNum()); let si = index">
-                    <button class="pick pick-visual" type="button" (click)="openPicPicker(0, si)">
-                      <img
-                        class="pick-thumb"
-                        [src]="'assets/pics/' + pad3(pictureSequences()[0][si]) + '.jpg'"
-                        alt=""
-                        loading="lazy"
-                      />
-                      <span class="pick-label">{{ pad3(pictureSequences()[0][si]) }}</span>
-                    </button>
-                  </div>
+            <p class="seq-scroll-hint muted small" *ngIf="stepsNum() > 6">
+              Scroll horizontally to see all {{ stepsNum() }} steps. Trial and copy columns stay pinned on the left.
+            </p>
+            <div class="seq-table-wrap">
+              <div
+                class="seq-table"
+                [class.seq-table--per-trial]="!sameSequenceForAllTrials()"
+                [class.seq-table--synced]="sameSequenceForAllTrials()"
+                [class.seq-table--dense]="stepsNum() >= 8"
+                [style.--seq-steps]="stepsNum()"
+              >
+                <div class="seq-row header">
+                  <div class="cell h trial-col">{{ sameSequenceForAllTrials() ? 'All trials' : 'Trial' }}</div>
+                  <div class="cell h seq-copy-col" *ngIf="!sameSequenceForAllTrials()">Copy</div>
+                  <div class="cell h step-col" *ngFor="let _ of [].constructor(stepsNum()); let si = index">Step {{ si + 1 }}</div>
                 </div>
-              </ng-container>
+
+                <ng-container *ngIf="sameSequenceForAllTrials(); else picturePerTrialRows">
+                  <div class="seq-row">
+                    <div class="cell trial trial-col synced">★</div>
+                    <div class="cell step-col" *ngFor="let __ of [].constructor(stepsNum()); let si = index">
+                      <button class="pick pick-visual" type="button" (click)="openPicPicker(0, si)">
+                        <img
+                          class="pick-thumb"
+                          [src]="'assets/pics/' + pad3(pictureSequences()[0][si]) + '.jpg'"
+                          alt=""
+                          loading="lazy"
+                        />
+                        <span class="pick-label">{{ pad3(pictureSequences()[0][si]) }}</span>
+                      </button>
+                    </div>
+                  </div>
+                </ng-container>
               <ng-template #picturePerTrialRows>
                 <div class="seq-row" *ngFor="let _ of [].constructor(trials()); let ti = index">
-                  <div class="cell trial">{{ ti + 1 }}</div>
+                  <div class="cell trial trial-col">{{ ti + 1 }}</div>
                   <div class="cell seq-copy-col">
                     <button
                       *ngIf="ti > 0"
                       type="button"
-                      class="btn ghost seq-copy-prev"
+                      class="seq-copy-prev"
+                      title="Copy previous trial"
                       (click)="copyPreviousTrialSequence(ti)"
                     >
-                      Copy previous
+                      Copy prev
                     </button>
                   </div>
-                  <div class="cell" *ngFor="let __ of [].constructor(stepsNum()); let si = index">
+                  <div class="cell step-col" *ngFor="let __ of [].constructor(stepsNum()); let si = index">
                     <button class="pick pick-visual" type="button" (click)="openPicPicker(ti, si)">
                       <img
                         class="pick-thumb"
@@ -359,6 +376,7 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
                   </div>
                 </div>
               </ng-template>
+              </div>
             </div>
           </div>
 
@@ -416,45 +434,57 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
               </div>
             </div>
 
-            <div class="seq-table">
-              <div class="seq-row header">
-                <div class="cell h">{{ sameSequenceForAllTrials() ? 'All trials' : 'Trial' }}</div>
-                <div class="cell h seq-copy-col" *ngIf="!sameSequenceForAllTrials()">Copy</div>
-                <div class="cell h" *ngFor="let _ of [].constructor(stepsNum()); let si = index">Step {{ si + 1 }}</div>
-              </div>
+            <p class="seq-scroll-hint muted small" *ngIf="stepsNum() > 6">
+              Scroll horizontally to see all {{ stepsNum() }} steps. Trial and copy columns stay pinned on the left.
+            </p>
+            <div class="seq-table-wrap">
+              <div
+                class="seq-table"
+                [class.seq-table--per-trial]="!sameSequenceForAllTrials()"
+                [class.seq-table--synced]="sameSequenceForAllTrials()"
+                [class.seq-table--dense]="stepsNum() >= 8"
+                [style.--seq-steps]="stepsNum()"
+              >
+                <div class="seq-row header">
+                  <div class="cell h trial-col">{{ sameSequenceForAllTrials() ? 'All trials' : 'Trial' }}</div>
+                  <div class="cell h seq-copy-col" *ngIf="!sameSequenceForAllTrials()">Copy</div>
+                  <div class="cell h step-col" *ngFor="let _ of [].constructor(stepsNum()); let si = index">Step {{ si + 1 }}</div>
+                </div>
 
-              <ng-container *ngIf="sameSequenceForAllTrials(); else locationPerTrialRows">
-                <div class="seq-row">
-                  <div class="cell trial synced">★</div>
-                  <div class="cell" *ngFor="let __ of [].constructor(stepsNum()); let si = index">
-                    <button class="pick pick-loc" type="button" (click)="openLocPicker(0, si)">
-                      <span class="loc-pill">{{ locationSequences()[0][si] }}</span>
-                      <span class="pick-label">Cell</span>
-                    </button>
+                <ng-container *ngIf="sameSequenceForAllTrials(); else locationPerTrialRows">
+                  <div class="seq-row">
+                    <div class="cell trial trial-col synced">★</div>
+                    <div class="cell step-col" *ngFor="let __ of [].constructor(stepsNum()); let si = index">
+                      <button class="pick pick-loc" type="button" (click)="openLocPicker(0, si)">
+                        <span class="loc-pill">{{ locationSequences()[0][si] }}</span>
+                        <span class="pick-label">Cell</span>
+                      </button>
+                    </div>
                   </div>
-                </div>
-              </ng-container>
-              <ng-template #locationPerTrialRows>
-                <div class="seq-row" *ngFor="let _ of [].constructor(trials()); let ti = index">
-                  <div class="cell trial">{{ ti + 1 }}</div>
-                  <div class="cell seq-copy-col">
-                    <button
-                      *ngIf="ti > 0"
-                      type="button"
-                      class="btn ghost seq-copy-prev"
-                      (click)="copyPreviousTrialSequence(ti)"
-                    >
-                      Copy previous
-                    </button>
+                </ng-container>
+                <ng-template #locationPerTrialRows>
+                  <div class="seq-row" *ngFor="let _ of [].constructor(trials()); let ti = index">
+                    <div class="cell trial trial-col">{{ ti + 1 }}</div>
+                    <div class="cell seq-copy-col">
+                      <button
+                        *ngIf="ti > 0"
+                        type="button"
+                        class="seq-copy-prev"
+                        title="Copy previous trial"
+                        (click)="copyPreviousTrialSequence(ti)"
+                      >
+                        Copy prev
+                      </button>
+                    </div>
+                    <div class="cell step-col" *ngFor="let __ of [].constructor(stepsNum()); let si = index">
+                      <button class="pick pick-loc" type="button" (click)="openLocPicker(ti, si)">
+                        <span class="loc-pill">{{ locationSequences()[ti][si] }}</span>
+                        <span class="pick-label">Cell</span>
+                      </button>
+                    </div>
                   </div>
-                  <div class="cell" *ngFor="let __ of [].constructor(stepsNum()); let si = index">
-                    <button class="pick pick-loc" type="button" (click)="openLocPicker(ti, si)">
-                      <span class="loc-pill">{{ locationSequences()[ti][si] }}</span>
-                      <span class="pick-label">Cell</span>
-                    </button>
-                  </div>
-                </div>
-              </ng-template>
+                </ng-template>
+              </div>
             </div>
           </div>
 
@@ -885,8 +915,13 @@ export class AppComponent {
     effect(() => {
       if (this.screen() !== 'setup') return;
       const t = Math.max(1, Math.min(50, this.trials()));
-      const steps = Math.max(1, Math.min(5, this.stepsNum()));
       const task = this.taskType();
+      const maxSteps = 16;
+      const rawSteps = this.stepsNum();
+      const steps = Math.max(1, Math.min(maxSteps, rawSteps));
+      if (steps !== rawSteps) {
+        untracked(() => this.stepsNum.set(steps));
+      }
       const syncAll = this.sameSequenceForAllTrials();
       if (task === this.TaskType.Picture) {
         const cur = untracked(() => this.pictureSequences());
@@ -1001,6 +1036,15 @@ export class AppComponent {
 
   isSpatialTask() {
     return this.taskType() === this.TaskType.Location;
+  }
+
+  maxStepsNum() {
+    return 16;
+  }
+
+  setStepsNum(raw: number) {
+    const max = this.maxStepsNum();
+    this.stepsNum.set(Math.max(1, Math.min(max, Number(raw) || 1)));
   }
 
   setSameSequenceForAllTrials(on: boolean) {

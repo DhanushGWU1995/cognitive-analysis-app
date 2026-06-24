@@ -108,7 +108,10 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
           <div class="logo">SELeCT</div>
           <div class="subtitle">Toddler Memory (Web)</div>
         </div>
-        <div class="chip" *ngIf="screen() === 'run'">Trial {{ trialIndex() + 1 }} / {{ trials() }}</div>
+        <div class="topbar-actions" *ngIf="screen() === 'run' || screen() === 'results'">
+          <div class="chip" *ngIf="screen() === 'run'">Trial {{ trialIndex() + 1 }} / {{ trials() }}</div>
+          <button type="button" class="btn ghost topbar-btn" (click)="returnToSetup()">Edit setup</button>
+        </div>
       </header>
 
       <main class="main">
@@ -901,6 +904,46 @@ export class AppComponent {
     this.screen.set('setup');
   }
 
+  /** Leave study/test and return to setup without resetting programmed sequences. */
+  returnToSetup() {
+    if (this.screen() !== 'run' && this.screen() !== 'results') return;
+    this._stopTimer();
+    this._stopAutoDemo();
+    this._stopAllAudio();
+    this._resetSessionProgress();
+    this.screen.set('setup');
+  }
+
+  private _resetSessionProgress() {
+    this.results.set([]);
+    this.trialIndex.set(0);
+    this.stepIndex.set(0);
+    this.pressed.set([]);
+    this.pressedOrder.set([]);
+    this.feedback.set(null);
+    this.showCongrats.set(false);
+    this._clearBorderFlashes();
+    this.sessionStudyDone.set(false);
+    this.sequenceChangedPromptOpen.set(false);
+    this.studyReturnToTest.set(false);
+    this.automaticPlayback.set(false);
+    this.autoHighlightCell.set(null);
+    this.locTrialPicId.set(1);
+    this.picTestCellToPic.set({});
+    this.picStudyCellByStep.set([]);
+    this.trialTestCells.set([]);
+    this.trialTouches.set([]);
+    this.trialSequence.set([]);
+    this.phase.set('study');
+    this.countdown.set(0);
+    this.trialTapCount = 0;
+    this.trialWrongCount = 0;
+    if (this.congratsTimer != null) {
+      window.clearTimeout(this.congratsTimer);
+      this.congratsTimer = null;
+    }
+  }
+
   taskTitle() {
     return this.isSpatialTask() ? 'Spatial Task' : 'Object Task';
   }
@@ -988,20 +1031,7 @@ export class AppComponent {
 
   private _startSession() {
     if (!this.canStart()) return;
-    this.results.set([]);
-    this.trialIndex.set(0);
-    this.stepIndex.set(0);
-    this.pressed.set([]);
-    this.pressedOrder.set([]);
-    this.feedback.set(null);
-    this.showCongrats.set(false);
-    this._clearBorderFlashes();
-    this.sessionStudyDone.set(false);
-    this.sequenceChangedPromptOpen.set(false);
-    this.locTrialPicId.set(1);
-    this.picTestCellToPic.set({});
-    this.trialTestCells.set([]);
-    this.trialTouches.set([]);
+    this._resetSessionProgress();
     this.sessionDate = new Date();
     this.sessionStartedAt = performance.now();
     this.totalTrialsNum.set(this.trials());

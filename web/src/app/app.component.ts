@@ -586,13 +586,15 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
                 </div>
               </div>
               <ng-container *ngIf="showImageInGridCell(cell); else emptyCell">
-                <img
-                  class="pic"
-                  [src]="'assets/pics/' + pad3(picIdInGridCell(cell)) + '.jpg'"
-                  alt=""
-                  draggable="false"
-                  loading="lazy"
-                />
+                <div class="cell-media">
+                  <img
+                    class="pic"
+                    [src]="'assets/pics/' + pad3(picIdInGridCell(cell)) + '.jpg'"
+                    alt=""
+                    draggable="false"
+                    loading="lazy"
+                  />
+                </div>
               </ng-container>
               <ng-template #emptyCell>
                 <div class="cell-empty" aria-hidden="true"></div>

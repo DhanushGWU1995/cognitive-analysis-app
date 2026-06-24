@@ -459,6 +459,22 @@ const LEGACY_REPORT_HEADER = [
             <button class="btn ghost" (click)="screen.set('home')">Back</button>
             <button class="btn primary" [disabled]="!canStart()" (click)="start()">Start</button>
           </div>
+
+          <div class="picker-overlay" *ngIf="sameSequencePromptOpen()" (click)="dismissSameSequencePrompt()">
+            <div class="picker same-seq-prompt" (click)="$event.stopPropagation()">
+              <div class="picker-top">
+                <div class="picker-title">Same sequence for all trials</div>
+              </div>
+              <p class="same-seq-prompt-copy">
+                Every trial uses the same sequence. Turning on
+                <b>Same sequence for all trials</b> so study runs once at the start of the session (not before each
+                trial).
+              </p>
+              <div class="same-seq-prompt-actions">
+                <button class="btn primary" type="button" (click)="dismissSameSequencePrompt()">OK</button>
+              </div>
+            </div>
+          </div>
         </section>
 
         <section class="stage" *ngIf="screen() === 'run'">
@@ -758,6 +774,8 @@ export class AppComponent {
   readonly locPickerOpen = signal(false);
   readonly locPickerTrial = signal(0);
   readonly locPickerStep = signal(0);
+  readonly sameSequencePromptOpen = signal(false);
+  private pendingStartAfterSameSequencePrompt = false;
 
   readonly expectedNext = computed(() => {
     const seq = this.trialSequence();
@@ -854,6 +872,8 @@ export class AppComponent {
   goSetup(type: 'location' | 'picture') {
     this.taskType.set(type);
     this.sameSequenceForAllTrials.set(false);
+    this.sameSequencePromptOpen.set(false);
+    this.pendingStartAfterSameSequencePrompt = false;
     this.screen.set('setup');
   }
 
@@ -890,6 +910,41 @@ export class AppComponent {
       );
       this.locationSequences.set(next);
     }
+    this._maybePromptSameSequenceForAllTrials(false);
+  }
+
+  dismissSameSequencePrompt() {
+    this.sameSequencePromptOpen.set(false);
+    if (!this.sameSequenceForAllTrials()) {
+      this.setSameSequenceForAllTrials(true);
+    }
+    if (this.pendingStartAfterSameSequencePrompt) {
+      this.pendingStartAfterSameSequencePrompt = false;
+      this._startSession();
+    }
+  }
+
+  private _setupSequences() {
+    return this.taskType() === this.TaskType.Location ? this.locationSequences() : this.pictureSequences();
+  }
+
+  private _allTrialSequencesMatch() {
+    const trials = Math.max(1, this.trials());
+    if (trials <= 1) return false;
+    const steps = Math.max(1, this.stepsNum());
+    const rows = this._setupSequences()
+      .slice(0, trials)
+      .map((row) => row.slice(0, steps));
+    if (rows.length < 2) return false;
+    const key = JSON.stringify(rows[0]);
+    return rows.every((row) => JSON.stringify(row) === key);
+  }
+
+  private _maybePromptSameSequenceForAllTrials(pendingStart: boolean) {
+    if (this.screen() !== 'setup') return;
+    if (this.sameSequenceForAllTrials() || !this._allTrialSequencesMatch()) return;
+    this.pendingStartAfterSameSequencePrompt = pendingStart;
+    this.sameSequencePromptOpen.set(true);
   }
 
   private _syncAllTrialsToMaster(seqs: number[][]) {
@@ -899,6 +954,15 @@ export class AppComponent {
   }
 
   start() {
+    if (!this.canStart()) return;
+    if (!this.sameSequenceForAllTrials() && this._allTrialSequencesMatch()) {
+      this._maybePromptSameSequenceForAllTrials(true);
+      return;
+    }
+    this._startSession();
+  }
+
+  private _startSession() {
     if (!this.canStart()) return;
     this.results.set([]);
     this.trialIndex.set(0);
@@ -1766,6 +1830,7 @@ export class AppComponent {
     next[trialIdx][stepIdx] = pic;
     if (this.sameSequenceForAllTrials()) next = this._syncAllTrialsToMaster(next);
     this.pictureSequences.set(next);
+    this._maybePromptSameSequenceForAllTrials(false);
   }
 
   openPicPicker(trialIdx: number, stepIdx: number) {
@@ -1827,6 +1892,7 @@ export class AppComponent {
     next[trialIdx][stepIdx] = cell;
     if (this.sameSequenceForAllTrials()) next = this._syncAllTrialsToMaster(next);
     this.locationSequences.set(next);
+    this._maybePromptSameSequenceForAllTrials(false);
   }
 
   private _firstUnusedInRange(used: number[], minVal: number, maxVal: number) {

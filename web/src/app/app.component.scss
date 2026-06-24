@@ -845,8 +845,16 @@ input {
   cursor: pointer;
 }
 
-.seq-apply {
-  height: 38px;
+.seq-copy-col {
+  min-width: 118px;
+  max-width: 132px;
+}
+
+.seq-copy-prev {
+  height: 32px;
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 800;
   white-space: nowrap;
 }
 

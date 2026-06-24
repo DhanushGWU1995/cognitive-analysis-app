@@ -513,18 +513,19 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
             </div>
           </div>
 
-          <div class="picker-overlay" *ngIf="sameSequencePromptOpen()" (click)="dismissSameSequencePrompt()">
+          <div class="picker-overlay" *ngIf="sameSequencePromptOpen()" (click)="declineSameSequencePrompt()">
             <div class="picker same-seq-prompt" (click)="$event.stopPropagation()">
               <div class="picker-top">
                 <div class="picker-title">Same sequence for all trials</div>
               </div>
               <p class="same-seq-prompt-copy">
-                Every trial uses the same sequence. Turning on
+                Every trial uses the same sequence. Turn on
                 <b>Same sequence for all trials</b> so study runs once at the start of the session (not before each
                 trial).
               </p>
               <div class="same-seq-prompt-actions">
-                <button class="btn primary" type="button" (click)="dismissSameSequencePrompt()">OK</button>
+                <button class="btn ghost" type="button" (click)="declineSameSequencePrompt()">Not now</button>
+                <button class="btn primary" type="button" (click)="acceptSameSequencePrompt()">Turn on</button>
               </div>
             </div>
           </div>
@@ -836,8 +837,8 @@ export class AppComponent {
   private pendingStartAfterSameSequencePrompt = false;
   /** Per-trial sequences saved before "same sequence for all trials" overwrites them. */
   private perTrialSequenceSnapshot: number[][] | null = null;
-  /** Skip auto-prompt right after the user explicitly turns off same-sequence mode. */
-  private suppressSameSequenceAutoPrompt = false;
+  /** User chose not to enable same-sequence mode while all trials still match. */
+  private declinedSameSequenceSuggestion = false;
   readonly sequenceValidationPromptOpen = signal(false);
   readonly sequenceValidationErrors = signal<string[]>([]);
   readonly sequenceChangedPromptOpen = signal(false);
@@ -942,7 +943,7 @@ export class AppComponent {
     this.sameSequencePromptOpen.set(false);
     this.pendingStartAfterSameSequencePrompt = false;
     this.perTrialSequenceSnapshot = null;
-    this.suppressSameSequenceAutoPrompt = false;
+    this.declinedSameSequenceSuggestion = false;
     this.sequenceValidationPromptOpen.set(false);
     this.sequenceValidationErrors.set([]);
     this.locationSequences.set(DEFAULT_LOCATION_ROWS.map((row) => [...row]));
@@ -1004,19 +1005,17 @@ export class AppComponent {
 
   setSameSequenceForAllTrials(on: boolean) {
     if (on) {
+      this.declinedSameSequenceSuggestion = false;
       this._snapshotPerTrialSequences();
       this.sameSequenceForAllTrials.set(true);
       this.applySequenceToAllTrials();
       return;
     }
-    this.suppressSameSequenceAutoPrompt = true;
+    this.declinedSameSequenceSuggestion = true;
     this.sameSequenceForAllTrials.set(false);
     this.sameSequencePromptOpen.set(false);
     this.pendingStartAfterSameSequencePrompt = false;
     this._restorePerTrialSequencesFromSnapshot();
-    queueMicrotask(() => {
-      this.suppressSameSequenceAutoPrompt = false;
-    });
   }
 
   private _snapshotPerTrialSequences() {
@@ -1077,20 +1076,37 @@ export class AppComponent {
     const next = normalized.map((row, i) => (i === trialIdx ? copied : [...row]));
     if (isPicture) this.pictureSequences.set(next);
     else this.locationSequences.set(next);
+    this._onTrialSequencesChanged();
+  }
+
+  declineSameSequencePrompt() {
+    this.sameSequencePromptOpen.set(false);
+    this.declinedSameSequenceSuggestion = true;
+    this.pendingStartAfterSameSequencePrompt = false;
+  }
+
+  acceptSameSequencePrompt() {
+    this.sameSequencePromptOpen.set(false);
+    this.declinedSameSequenceSuggestion = false;
+    const pendingStart = this.pendingStartAfterSameSequencePrompt;
+    this.pendingStartAfterSameSequencePrompt = false;
+    if (!this.sameSequenceForAllTrials()) {
+      this.setSameSequenceForAllTrials(true);
+    }
+    if (pendingStart && this._passesSequenceValidation()) {
+      this._startSession();
+    }
+  }
+
+  private _onTrialSequencesChanged() {
+    if (!this._allTrialSequencesMatch()) {
+      this.declinedSameSequenceSuggestion = false;
+    }
     this._maybePromptSameSequenceForAllTrials(false);
   }
 
   dismissSameSequencePrompt() {
-    this.sameSequencePromptOpen.set(false);
-    if (!this.sameSequenceForAllTrials()) {
-      this.setSameSequenceForAllTrials(true);
-    }
-    if (this.pendingStartAfterSameSequencePrompt) {
-      this.pendingStartAfterSameSequencePrompt = false;
-      if (this._passesSequenceValidation()) {
-        this._startSession();
-      }
-    }
+    this.declineSameSequencePrompt();
   }
 
   dismissSequenceValidationPrompt() {
@@ -1156,7 +1172,7 @@ export class AppComponent {
 
   private _maybePromptSameSequenceForAllTrials(pendingStart: boolean) {
     if (this.screen() !== 'setup') return;
-    if (this.suppressSameSequenceAutoPrompt) return;
+    if (this.declinedSameSequenceSuggestion) return;
     if (this.sameSequenceForAllTrials() || !this._allTrialSequencesMatch()) return;
     this.pendingStartAfterSameSequencePrompt = pendingStart;
     this.sameSequencePromptOpen.set(true);
@@ -2085,7 +2101,7 @@ export class AppComponent {
     next[trialIdx][stepIdx] = pic;
     if (this.sameSequenceForAllTrials()) next = this._syncAllTrialsToMaster(next);
     this.pictureSequences.set(next);
-    this._maybePromptSameSequenceForAllTrials(false);
+    this._onTrialSequencesChanged();
   }
 
   openPicPicker(trialIdx: number, stepIdx: number) {
@@ -2149,7 +2165,7 @@ export class AppComponent {
     next[trialIdx][stepIdx] = cell;
     if (this.sameSequenceForAllTrials()) next = this._syncAllTrialsToMaster(next);
     this.locationSequences.set(next);
-    this._maybePromptSameSequenceForAllTrials(false);
+    this._onTrialSequencesChanged();
   }
 
   private _firstUnusedInRange(used: number[], minVal: number, maxVal: number) {

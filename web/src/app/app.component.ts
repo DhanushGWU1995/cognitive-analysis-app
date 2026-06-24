@@ -1213,15 +1213,16 @@ export class AppComponent {
     const isFirstTap = this.trialTapCount === 1;
     const ok = choiceId === expected;
     const isFirstWrong = !ok && this.trialWrongCount === 0;
-    const giveFeedback = !isFreeRecall && this._shouldGiveFeedback(ok, isFirstTap, isFirstWrong);
+    const giveTapFeedback = this._shouldGiveFeedback(ok, isFirstTap, isFirstWrong);
+    const giveScoredFeedback = !isFreeRecall && giveTapFeedback;
 
-    if (giveFeedback && this.feedbackBorder()) {
+    if (giveTapFeedback && this.feedbackBorder()) {
       this._flashCellBorder(tappedCell);
     }
 
     if (!ok && this.testMode() === this.TestMode.Standard) {
       this.trialWrongCount++;
-      if (giveFeedback) {
+      if (giveScoredFeedback) {
         this.feedback.set('wrong');
         this._play('wrong');
         window.setTimeout(() => this.feedback.set(null), 450);
@@ -1232,16 +1233,16 @@ export class AppComponent {
       return;
     }
 
-    if (!isFreeRecall && giveFeedback) {
+    if (giveScoredFeedback) {
       this.feedback.set(ok ? 'correct' : 'wrong');
       this._play(ok ? 'correct' : 'wrong');
-    } else if (isFreeRecall && giveFeedback) {
+    } else if (isFreeRecall && giveTapFeedback) {
       this._play('neutral');
     }
 
     if (!ok) {
       this.trialWrongCount++;
-      if (giveFeedback) {
+      if (giveScoredFeedback) {
         window.setTimeout(() => this.feedback.set(null), 450);
       }
       return;
@@ -1253,7 +1254,7 @@ export class AppComponent {
     this.pressedOrder.set([...this.pressedOrder(), { cell: choiceId, step: next.length }]);
     if (this._isSequenceComplete(next)) {
       this._completeTrial(next);
-    } else if (giveFeedback) {
+    } else if (giveScoredFeedback) {
       window.setTimeout(() => this.feedback.set(null), 450);
     }
   }

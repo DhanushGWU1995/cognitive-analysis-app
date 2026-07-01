@@ -264,7 +264,8 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
             <p class="muted small">
               On demo trials the computer highlights each correct step in order (border and sound always on). The
               teacher says “Watch!” — the child does not tap. Teacher study/practice is skipped on demo trials; the
-              automatic watch is the demonstration.
+              automatic watch is the demonstration. Set <b>Highlights per step</b> to repeat each sequence item before
+              advancing (e.g. 3 flashes on location 1, then location 4).
             </p>
             <div class="flag-grid">
               <label class="flag">
@@ -284,6 +285,17 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
                   [value]="demoTrials()"
                   [disabled]="!automaticDemo()"
                   (input)="demoTrials.set(+$any($event.target).value)"
+                />
+              </label>
+              <label>
+                <div class="lbl">Highlights per step</div>
+                <input
+                  type="number"
+                  min="1"
+                  max="16"
+                  [value]="demoHighlightsPerStep()"
+                  [disabled]="!automaticDemo()"
+                  (input)="demoHighlightsPerStep.set(+$any($event.target).value)"
                 />
               </label>
             </div>
@@ -794,6 +806,7 @@ export class AppComponent {
   /** First N trials: computer highlights the answer; child watches (no taps). */
   readonly automaticDemo = signal(false);
   readonly demoTrials = signal(0);
+  readonly demoHighlightsPerStep = signal(1);
 
   // Runtime
   readonly trialIndex = signal(0);
@@ -1591,6 +1604,7 @@ export class AppComponent {
     if (this.phase() !== 'test' || !this.isDemoTrial()) return;
 
     const seq = this.trialSequence().map((id) => Number(id));
+    const highlightsPerStep = Math.max(1, Math.min(16, this.demoHighlightsPerStep()));
     this.automaticPlayback.set(true);
     this.autoHighlightCell.set(null);
     this.pressed.set([]);
@@ -1599,16 +1613,21 @@ export class AppComponent {
     this._clearBorderFlashes();
 
     let step = 0;
+    let repeatIndex = 0;
     const stepMs = Math.max(800, this.studySeconds() * 1000);
 
-    const playStep = () => {
+    const finishDemo = () => {
+      this.automaticPlayback.set(false);
+      this.autoHighlightCell.set(null);
+      const presses = [...seq];
+      this.pressed.set(presses);
+      this.pressedOrder.set(presses.map((cell, index) => ({ cell, step: index + 1 })));
+      this._completeTrial(presses);
+    };
+
+    const playHighlight = () => {
       if (step >= seq.length) {
-        this.automaticPlayback.set(false);
-        this.autoHighlightCell.set(null);
-        const presses = [...seq];
-        this.pressed.set(presses);
-        this.pressedOrder.set(presses.map((cell, index) => ({ cell, step: index + 1 })));
-        this._completeTrial(presses);
+        finishDemo();
         return;
       }
 
@@ -1616,7 +1635,8 @@ export class AppComponent {
       const cell = this._gridCellForItem(item);
       if (cell == null) {
         step++;
-        playStep();
+        repeatIndex = 0;
+        playHighlight();
         return;
       }
 
@@ -1635,14 +1655,22 @@ export class AppComponent {
         automatic: true,
       });
 
-      step++;
+      repeatIndex++;
+      const doneWithStep = repeatIndex >= highlightsPerStep;
+
       this.autoDemoTimer = window.setTimeout(() => {
         this.autoHighlightCell.set(null);
-        this.autoDemoTimer = window.setTimeout(playStep, 280);
+        this.autoDemoTimer = window.setTimeout(() => {
+          if (doneWithStep) {
+            step++;
+            repeatIndex = 0;
+          }
+          playHighlight();
+        }, 280);
       }, stepMs);
     };
 
-    playStep();
+    playHighlight();
   }
 
   private _gridCellForItem(item: number): number | null {

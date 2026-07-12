@@ -190,7 +190,10 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
                   (change)="setTestMode(TestMode.FreeRecall)"
                 />
                 <span class="test-mode-title">(B) Free recall</span>
-                <span class="test-mode-desc">Border + neutral sound on every tap. No right/wrong feedback.</span>
+                <span class="test-mode-desc"
+                  >Border + neutral sound on every tap. No right/wrong feedback. Trial succeeds only if the full
+                  sequence is tapped in the correct order.</span
+                >
               </label>
               <label class="test-mode-card" [class.selected]="testMode() === TestMode.AdvanceWhenCorrect">
                 <input
@@ -856,11 +859,17 @@ export class AppComponent {
   private sessionDate = new Date();
   private trialTapCount = 0;
   private trialWrongCount = 0;
+  /** Prevents extra taps / double-recording while a trial is finishing. */
+  private trialLocked = false;
   private timer: number | null = null;
   private congratsTimer: number | null = null;
+  private advanceTimer: number | null = null;
   private activeAudio: HTMLAudioElement[] = [];
   private borderFlashTimers = new Map<number, number>();
   private autoDemoTimer: number | null = null;
+  private autoDemoStartTimer: number | null = null;
+  /** Set after a non-demo teacher study has been shown for the current shared sequence. */
+  private liveStudyShownForSharedSequence = false;
   /** Grid cells showing a short-lived border after a tap (clears after ~2s). */
   readonly borderFlashCells = signal<Set<number>>(new Set());
 
@@ -1036,6 +1045,10 @@ export class AppComponent {
     this.countdown.set(0);
     this.trialTapCount = 0;
     this.trialWrongCount = 0;
+    this.trialLocked = false;
+    this.liveStudyShownForSharedSequence = false;
+    this._clearAdvanceTimer();
+    this._stopAutoDemo();
     if (this.congratsTimer != null) {
       window.clearTimeout(this.congratsTimer);
       this.congratsTimer = null;
@@ -1328,6 +1341,9 @@ export class AppComponent {
 
   private _startTeacherStudyForCurrentTrial() {
     this.sessionStudyDone.set(false);
+    if (!this.isDemoTrial()) {
+      this.liveStudyShownForSharedSequence = true;
+    }
     this.phase.set('study');
     this.countdown.set(this.studySeconds());
     this._runStudyTick();
@@ -1356,6 +1372,9 @@ export class AppComponent {
   continueToTest() {
     if (this.phase() !== 'studyReady') return;
     this.sessionStudyDone.set(true);
+    if (!this.isDemoTrial()) {
+      this.liveStudyShownForSharedSequence = true;
+    }
     this._enterTestPhase();
   }
 
@@ -1393,6 +1412,7 @@ export class AppComponent {
     this.pressed.set([]);
     this.pressedOrder.set([]);
     this.feedback.set(null);
+    this.trialLocked = false;
     if (this.taskType() === this.TaskType.Location) {
       this.trialTestCells.set(this._buildLocationTestCells());
     } else {
@@ -1406,7 +1426,11 @@ export class AppComponent {
     this._clearBorderFlashes();
     this._stopTimer();
     if (this.isDemoTrial()) {
-      window.setTimeout(() => this._runAutomaticDemo(), 450);
+      if (this.autoDemoStartTimer != null) window.clearTimeout(this.autoDemoStartTimer);
+      this.autoDemoStartTimer = window.setTimeout(() => {
+        this.autoDemoStartTimer = null;
+        this._runAutomaticDemo();
+      }, 450);
       return;
     }
   }
@@ -1450,13 +1474,16 @@ export class AppComponent {
   }
 
   onPick(choice: number, tappedCell: number) {
-    if (this.phase() !== 'test' || this.automaticPlayback()) return;
+    if (this.phase() !== 'test' || this.automaticPlayback() || this.trialLocked) return;
     this._handleTestTap(Number(choice), tappedCell);
   }
 
   private _handleTestTap(choiceId: number, tappedCell: number) {
+    if (this.trialLocked) return;
+
     const expected = Number(this.expectedNext());
     const presses = this.pressed();
+    const seq = this.trialSequence().map((id) => Number(id));
     const isFreeRecall = this.testMode() === this.TestMode.FreeRecall;
     const ignored = this._shouldIgnoreRepeatTap(choiceId, expected);
 
@@ -1484,14 +1511,32 @@ export class AppComponent {
       this._flashCellBorder(tappedCell);
     }
 
+    // Free recall: every tap counts as a response. After StepsNum taps, succeed only if
+    // the full response matches the target sequence in order (spatial and picture).
+    if (isFreeRecall) {
+      if (giveTapFeedback) this._play('neutral');
+      if (!ok) this.trialWrongCount++;
+
+      const next = [...presses, choiceId];
+      this.pressed.set(next);
+      this.pressedOrder.set([...this.pressedOrder(), { cell: choiceId, step: next.length }]);
+
+      if (next.length < seq.length) return;
+
+      if (this._isSequenceComplete(next)) {
+        this._completeTrial(next);
+      } else {
+        this._failTrialAndAdvance();
+      }
+      return;
+    }
+
     if (!ok && this.testMode() === this.TestMode.Standard) {
       this.trialWrongCount++;
       if (giveScoredFeedback) {
         this.feedback.set('wrong');
         this._play('wrong');
         window.setTimeout(() => this.feedback.set(null), 450);
-      } else {
-        this._play('wrong');
       }
       this._failTrialAndAdvance();
       return;
@@ -1500,8 +1545,6 @@ export class AppComponent {
     if (giveScoredFeedback) {
       this.feedback.set(ok ? 'correct' : 'wrong');
       this._play(ok ? 'correct' : 'wrong');
-    } else if (isFreeRecall && giveTapFeedback) {
-      this._play('neutral');
     }
 
     if (!ok) {
@@ -1533,29 +1576,64 @@ export class AppComponent {
   }
 
   private _completeTrial(presses: number[]) {
+    if (this.trialLocked) return;
+    this.trialLocked = true;
+    this._hideTestGrid();
+
     const ms = Math.max(0, Math.round(performance.now() - this.trialStartedAt));
     const correct = this._isSequenceComplete(presses);
-    this._recordTrialResult(presses, correct, ms, this.isDemoTrial());
+    const isDemo = this.isDemoTrial();
+    this._recordTrialResult(presses, correct, ms, isDemo);
 
-    if (!correct) return;
+    // Only a correct-in-order sequence earns congrats; otherwise advance without reward.
+    if (!correct) {
+      this._scheduleAdvance(700);
+      return;
+    }
+
+    // Watch demos: advance quietly without the live-trial congrats burst.
+    if (isDemo) {
+      this._scheduleAdvance(500);
+      return;
+    }
 
     this._play('success');
     this._congratsBurst();
-    window.setTimeout(() => this._nextTrialOrDone(), 900);
+    this._scheduleAdvance(900);
   }
 
   private _failTrialAndAdvance() {
+    if (this.trialLocked) return;
+    this.trialLocked = true;
     const presses = this.pressed();
     const ms = Math.max(0, Math.round(performance.now() - this.trialStartedAt));
     this._recordTrialResult(presses, false, ms, this.isDemoTrial());
     this._hideTestGrid();
-    window.setTimeout(() => this._nextTrialOrDone(), 700);
+    this._scheduleAdvance(700);
+  }
+
+  private _scheduleAdvance(delayMs: number) {
+    this._clearAdvanceTimer();
+    this.advanceTimer = window.setTimeout(() => {
+      this.advanceTimer = null;
+      this._nextTrialOrDone();
+    }, delayMs);
+  }
+
+  private _clearAdvanceTimer() {
+    if (this.advanceTimer != null) {
+      window.clearTimeout(this.advanceTimer);
+      this.advanceTimer = null;
+    }
   }
 
   private _recordTrialResult(presses: number[], correct: boolean, ms: number, isDemo: boolean) {
     const sequence = [...this.trialSequence()];
     const taskType = this.taskType();
     const trialIdx = this.trialIndex();
+    // Guard against double-record for the same trial index.
+    if (this.results().some((r) => r.trial === trialIdx + 1)) return;
+
     this.results.set([
       ...this.results(),
       {
@@ -1594,14 +1672,14 @@ export class AppComponent {
       feedbackBorder: this.feedbackBorder(),
       freeRecall: testMode === this.TestMode.FreeRecall,
       progressCorrectOnly: testMode === this.TestMode.AdvanceWhenCorrect,
-      playSound: testMode !== this.TestMode.FreeRecall,
+      playSound: true,
       listPics: this._legacyListPicsForTrial(taskType, sequence),
       listLocations: this._legacyListLocationsForTrial(taskType, sequence),
     };
   }
 
   private _runAutomaticDemo() {
-    if (this.phase() !== 'test' || !this.isDemoTrial()) return;
+    if (this.phase() !== 'test' || !this.isDemoTrial() || this.trialLocked) return;
 
     const seq = this.trialSequence().map((id) => Number(id));
     const highlightsPerStep = Math.max(1, Math.min(16, this.demoHighlightsPerStep()));
@@ -1626,6 +1704,8 @@ export class AppComponent {
     };
 
     const playHighlight = () => {
+      if (this.trialLocked || this.phase() !== 'test') return;
+
       if (step >= seq.length) {
         finishDemo();
         return;
@@ -1644,16 +1724,19 @@ export class AppComponent {
       this._flashCellBorder(cell);
       this._playAutomaticStepSound();
 
-      this._appendTouch({
-        press: this.trialTouches().length + 1,
-        ms: this._touchElapsedMs(),
-        choice: item,
-        gridCell: cell,
-        expected: item,
-        correct: true,
-        ignored: false,
-        automatic: true,
-      });
+      // Record one exportable press per sequence step (extra highlight flashes are UI-only).
+      if (repeatIndex === 0) {
+        this._appendTouch({
+          press: this.trialTouches().length + 1,
+          ms: this._touchElapsedMs(),
+          choice: item,
+          gridCell: cell,
+          expected: item,
+          correct: true,
+          ignored: false,
+          automatic: true,
+        });
+      }
 
       repeatIndex++;
       const doneWithStep = repeatIndex >= highlightsPerStep;
@@ -1689,6 +1772,10 @@ export class AppComponent {
       window.clearTimeout(this.autoDemoTimer);
       this.autoDemoTimer = null;
     }
+    if (this.autoDemoStartTimer != null) {
+      window.clearTimeout(this.autoDemoStartTimer);
+      this.autoDemoStartTimer = null;
+    }
     this.automaticPlayback.set(false);
     this.autoHighlightCell.set(null);
   }
@@ -1715,11 +1802,23 @@ export class AppComponent {
     return sequence[Math.min(correctBefore, Math.max(0, sequence.length - 1))];
   }
 
+  private _legacyItemLabel(
+    choice: number,
+    letters: Record<number, string>,
+    taskType: 'location' | 'picture',
+  ) {
+    if (taskType === 'location') return String(choice);
+    return letters[choice] ?? `X${choice}`;
+  }
+
   private _legacyProgressString(
     pressesIncludingCurrent: number[],
     letters: Record<number, string>,
+    taskType: 'location' | 'picture',
   ) {
-    return pressesIncludingCurrent.map((choice) => this._legacyItemLabel(choice, letters)).join('');
+    return pressesIncludingCurrent
+      .map((choice) => this._legacyItemLabel(choice, letters, taskType))
+      .join('');
   }
 
   private _flashCellBorder(cell: number) {
@@ -1749,6 +1848,8 @@ export class AppComponent {
 
   private _nextTrialOrDone() {
     this._stopAutoDemo();
+    this._clearAdvanceTimer();
+    this.trialLocked = false;
     const t = this.trialIndex() + 1;
     if (t >= this.trials()) {
       this._stopAllAudio();
@@ -1768,11 +1869,27 @@ export class AppComponent {
     this._startTrialPhaseAfterSetup();
   }
 
-  /** Skip teacher-led study: ghost demo trials, shared-sequence mode, or same sequence as previous trial. */
+  /**
+   * Skip teacher-led study for: demo trials, or live trials that already had a non-demo
+   * study for this shared/matching sequence. After automatic watch demos, the first live
+   * trial always gets study once (demos do not count as teacher study).
+   */
   private _shouldSkipTeacherStudy() {
     if (this.isDemoTrial()) return true;
-    if (this.sameSequenceForAllTrials()) return this.trialIndex() > 0;
-    return this._sequenceMatchesPreviousTrial(this.trialIndex());
+    if (this.sameSequenceForAllTrials()) {
+      return this.liveStudyShownForSharedSequence;
+    }
+    if (this.trialIndex() <= 0) return false;
+    // Same sequence as previous live trial: skip only if a live study already happened.
+    if (this._sequenceMatchesPreviousTrial(this.trialIndex())) {
+      return this.liveStudyShownForSharedSequence || this._previousTrialWasLive();
+    }
+    return false;
+  }
+
+  private _previousTrialWasLive() {
+    const prev = this.results().find((r) => r.trial === this.trialIndex());
+    return !!prev && !prev.isDemo;
   }
 
   private _touchElapsedMs() {
@@ -1816,10 +1933,6 @@ export class AppComponent {
     return map;
   }
 
-  private _legacyItemLabel(choice: number, letters: Record<number, string>) {
-    return letters[choice] ?? `X${choice}`;
-  }
-
   /** Target picture filenames for this trial's sequence (legacy ListPics). */
   private _legacyListPicsForTrial(taskType: 'location' | 'picture', sequence: number[]) {
     if (taskType === 'location') {
@@ -1857,7 +1970,8 @@ export class AppComponent {
     for (const trial of this.results()) {
       const seq = trial.sequence;
       const letters = this._targetLetters(seq);
-      const recordable = trial.touches.filter((t) => !t.ignored && !t.automatic);
+      // Include automatic demo step presses (one per sequence step); skip ignored repeats.
+      const recordable = trial.touches.filter((t) => !t.ignored);
       const pressesSoFar: number[] = [];
       const meta = trial.report;
 
@@ -1877,9 +1991,9 @@ export class AppComponent {
           String(meta.trialInList),
           String(meta.listNum),
           this._legacySequenceBy(trial.taskType),
-          this._legacyItemLabel(touch.choice, letters),
-          this._legacyItemLabel(expectedId, letters),
-          this._legacyProgressString(pressesSoFar, letters),
+          this._legacyItemLabel(touch.choice, letters, trial.taskType),
+          this._legacyItemLabel(expectedId, letters, trial.taskType),
+          this._legacyProgressString(pressesSoFar, letters, trial.taskType),
           this._legacyBool(touchCorrect),
           this._legacyTrialAccuracy(trial.correct, isLast),
           (touch.ms / 1000).toFixed(3),
@@ -1993,7 +2107,7 @@ export class AppComponent {
 
   isGridCellDisabled(cell: number) {
     if (this.phase() !== 'test') return true;
-    if (this.automaticPlayback()) return true;
+    if (this.automaticPlayback() || this.trialLocked) return true;
     if (this.taskType() === this.TaskType.Location) {
       return !this.trialTestCells().includes(cell);
     }

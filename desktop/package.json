@@ -1,0 +1,59 @@
+{
+  "name": "select-toddler-desktop",
+  "version": "1.0.0",
+  "description": "SELeCT Toddler Memory — desktop app (Electron)",
+  "author": "SELeCT",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "build:web": "npm run build --prefix ../web -- --configuration electron",
+    "start": "npm run build:web && electron .",
+    "start:fast": "electron .",
+    "pack": "npm run build:web && electron-builder --dir",
+    "dist": "npm run build:web && electron-builder",
+    "dist:mac": "npm run build:web && electron-builder --mac",
+    "dist:win": "npm run build:web && electron-builder --win",
+    "dist:linux": "npm run build:web && electron-builder --linux"
+  },
+  "devDependencies": {
+    "electron": "^35.0.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "edu.gwu.select.toddler",
+    "productName": "SELeCT Toddler",
+    "copyright": "Copyright © 2026",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.js",
+      "preload.js"
+    ],
+    "extraResources": [
+      {
+        "from": "../web/dist/web/browser",
+        "to": "web",
+        "filter": ["**/*"]
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.education",
+      "target": ["dmg", "zip"],
+      "artifactName": "SELeCT-Toddler-${version}-mac.${ext}"
+    },
+    "win": {
+      "target": ["nsis"],
+      "artifactName": "SELeCT-Toddler-${version}-win.${ext}"
+    },
+    "linux": {
+      "target": ["AppImage"],
+      "category": "Education",
+      "artifactName": "SELeCT-Toddler-${version}-linux.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}

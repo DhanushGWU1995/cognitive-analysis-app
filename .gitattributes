@@ -1,0 +1,2 @@
+# Windows installer can exceed 50 MB; use Git LFS when present.
+release/*.exe filter=lfs diff=lfs merge=lfs -text

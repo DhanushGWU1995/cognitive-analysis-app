@@ -102,9 +102,21 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
           <div class="logo">SELeCT</div>
           <div class="subtitle">Toddler Memory (Web)</div>
         </div>
-        <div class="topbar-actions" *ngIf="screen() === 'run' || screen() === 'results'">
-          <div class="chip" *ngIf="screen() === 'run'">Trial {{ trialIndex() + 1 }} / {{ trials() }}</div>
-          <button type="button" class="btn ghost topbar-btn" (click)="returnToSetup()">Edit setup</button>
+        <div class="topbar-right">
+          <div class="topbar-actions" *ngIf="screen() === 'run' || screen() === 'results'">
+            <div class="chip" *ngIf="screen() === 'run'">Trial {{ trialIndex() + 1 }} / {{ trials() }}</div>
+            <button type="button" class="btn ghost topbar-btn" (click)="returnToSetup()">Edit setup</button>
+          </div>
+          <button
+            *ngIf="isDesktopApp"
+            type="button"
+            class="desktop-exit-btn"
+            title="Exit app"
+            aria-label="Exit app"
+            (click)="exitDesktopApp()"
+          >
+            Exit
+          </button>
         </div>
       </header>
 
@@ -771,6 +783,15 @@ export class AppComponent {
     return this.screen() === 'run';
   }
 
+  @HostBinding('class.desktop-app')
+  get hostDesktopApp() {
+    return this.isDesktopApp;
+  }
+
+  /** True when running inside the Electron desktop shell. */
+  readonly isDesktopApp =
+    typeof window !== 'undefined' && typeof window.selectDesktop?.closeApp === 'function';
+
   readonly TaskType = {
     Location: 'location',
     Picture: 'picture',
@@ -995,6 +1016,10 @@ export class AppComponent {
         this.feedbackEveryError.set(true);
         break;
     }
+  }
+
+  exitDesktopApp() {
+    window.selectDesktop?.closeApp();
   }
 
   goSetup(type: 'location' | 'picture') {

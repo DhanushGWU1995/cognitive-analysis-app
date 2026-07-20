@@ -60,6 +60,13 @@
   border: 1px solid rgba(15, 23, 42, 0.12);
 }
 
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+
 .topbar-actions {
   display: flex;
   align-items: center;
@@ -71,6 +78,24 @@
 .topbar-btn {
   padding: 6px 12px;
   font-size: 13px;
+}
+
+.desktop-exit-btn {
+  height: 34px;
+  min-width: 64px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(185, 28, 28, 0.35);
+  background: rgba(254, 226, 226, 0.95);
+  color: #991b1b;
+  font-weight: 800;
+  font-size: 13px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.desktop-exit-btn:hover {
+  background: #fecaca;
 }
 
 .main {

@@ -1,6 +1,6 @@
-const { contextBridge } = require('electron');
+const { contextBridge, ipcRenderer } = require('electron');
 
-// Reserved for future desktop-only APIs (e.g. default report save folder).
 contextBridge.exposeInMainWorld('selectDesktop', {
   platform: process.platform,
+  closeApp: () => ipcRenderer.send('app:quit'),
 });

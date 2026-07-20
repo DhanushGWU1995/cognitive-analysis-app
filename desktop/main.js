@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell } = require('electron');
+const { app, BrowserWindow, shell, ipcMain } = require('electron');
 const path = require('path');
 
 /** @returns {string} Folder containing index.html for the Angular build. */
@@ -39,6 +39,10 @@ function createWindow() {
     return { action: 'deny' };
   });
 }
+
+ipcMain.on('app:quit', () => {
+  app.quit();
+});
 
 app.whenReady().then(() => {
   createWindow();

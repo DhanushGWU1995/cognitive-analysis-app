@@ -203,8 +203,8 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
                 />
                 <span class="test-mode-title">(B) Free recall</span>
                 <span class="test-mode-desc"
-                  >Border + neutral sound on every tap. No right/wrong feedback. Trial succeeds only if the full
-                  sequence is tapped in the correct order.</span
+                  >No Correct / Try again coaching by default. Every tap is recorded. Trial succeeds only when the
+                  full sequence is tapped in order (wrong taps are logged and do not advance the step).</span
                 >
               </label>
               <label class="test-mode-card" [class.selected]="testMode() === TestMode.AdvanceWhenCorrect">
@@ -269,8 +269,8 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
               </label>
             </div>
             <p class="muted small">
-              Turn off <b>Every response</b> for first tap only. Turn off <b>Every wrong tap</b> to show Try again
-              only on the first mistake.
+              <b>Every response</b> on: feedback for every tap. Off: no response feedback, ever.
+              <b>Every wrong tap</b> on: error cue (wrong sound / Try again) on mistakes. Off: no error cue, ever.
             </p>
           </div>
 
@@ -692,7 +692,7 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
           </div>
           </div>
 
-          <div class="feedback" *ngIf="feedback() && testMode() !== TestMode.FreeRecall">
+          <div class="feedback" *ngIf="feedback()">
             <div class="pill" [class.ok]="feedback() === 'correct'" [class.no]="feedback() === 'wrong'">
               {{ feedback() === 'correct' ? 'Correct!' : 'Try again' }}
             </div>
@@ -1508,86 +1508,77 @@ export class AppComponent {
 
     const expected = Number(this.expectedNext());
     const presses = this.pressed();
-    const seq = this.trialSequence().map((id) => Number(id));
     const isFreeRecall = this.testMode() === this.TestMode.FreeRecall;
-    const ignored = this._shouldIgnoreRepeatTap(choiceId, expected);
+    const ok = choiceId === expected;
 
+    // Always record every tap in every test mode (including multi-taps / extras).
     this._appendTouch({
       press: this.trialTouches().length + 1,
       ms: this._touchElapsedMs(),
       choice: choiceId,
       gridCell: tappedCell,
       expected,
-      correct: choiceId === expected,
-      ignored,
+      correct: ok,
+      ignored: false,
       automatic: false,
     });
 
-    if (ignored) return;
-
     this.trialTapCount++;
-    const isFirstTap = this.trialTapCount === 1;
-    const ok = choiceId === expected;
-    const isFirstWrong = !ok && this.trialWrongCount === 0;
-    const giveTapFeedback = this._shouldGiveFeedback(ok, isFirstTap, isFirstWrong);
-    const giveScoredFeedback = !isFreeRecall && giveTapFeedback;
+    this._applyTapFeedback(ok, isFreeRecall, tappedCell);
 
-    if (giveTapFeedback && this.feedbackBorder()) {
-      this._flashCellBorder(tappedCell);
-    }
-
-    // Free recall: every tap counts as a response. After StepsNum taps, succeed only if
-    // the full response matches the target sequence in order (spatial and picture).
-    if (isFreeRecall) {
-      if (giveTapFeedback) this._play('neutral');
-      if (!ok) this.trialWrongCount++;
-
-      const next = [...presses, choiceId];
-      this.pressed.set(next);
-      this.pressedOrder.set([...this.pressedOrder(), { cell: choiceId, step: next.length }]);
-
-      if (next.length < seq.length) return;
-
-      if (this._isSequenceComplete(next)) {
-        this._completeTrial(next);
-      } else {
-        this._failTrialAndAdvance();
-      }
-      return;
-    }
-
+    // Standard: any wrong / multi-tap that is not the next expected item ends the trial (still recorded).
     if (!ok && this.testMode() === this.TestMode.Standard) {
       this.trialWrongCount++;
-      if (giveScoredFeedback) {
-        this.feedback.set('wrong');
-        this._play('wrong');
-        window.setTimeout(() => this.feedback.set(null), 450);
-      }
       this._failTrialAndAdvance();
       return;
     }
 
-    if (giveScoredFeedback) {
-      this.feedback.set(ok ? 'correct' : 'wrong');
-      this._play(ok ? 'correct' : 'wrong');
-    }
-
     if (!ok) {
+      // Free recall + Advance when correct: keep going; extras stay in the report.
       this.trialWrongCount++;
-      if (giveScoredFeedback) {
-        window.setTimeout(() => this.feedback.set(null), 450);
-      }
       return;
     }
 
-    this.feedback.set(null);
     const next = [...presses, choiceId];
     this.pressed.set(next);
     this.pressedOrder.set([...this.pressedOrder(), { cell: choiceId, step: next.length }]);
     if (this._isSequenceComplete(next)) {
       this._completeTrial(next);
-    } else if (giveScoredFeedback) {
+    }
+  }
+
+  /**
+   * Feedback flags (absolute on/off for all modes):
+   * - Every response ON → feedback on every tap; OFF → no response feedback, ever.
+   * - Every wrong tap ON → error cue on mistakes; OFF → no error cue, ever.
+   */
+  private _applyTapFeedback(ok: boolean, isFreeRecall: boolean, tappedCell: number) {
+    if (ok) {
+      if (!this.feedbackEveryResponse()) return;
+      if (this.feedbackBorder()) this._flashCellBorder(tappedCell);
+      if (isFreeRecall) {
+        this._play('neutral');
+        return;
+      }
+      this.feedback.set('correct');
+      this._play('correct');
       window.setTimeout(() => this.feedback.set(null), 450);
+      return;
+    }
+
+    // Wrong tap
+    if (this.feedbackEveryError()) {
+      if (this.feedbackBorder()) this._flashCellBorder(tappedCell);
+      this.feedback.set('wrong');
+      this._play('wrong');
+      window.setTimeout(() => this.feedback.set(null), 450);
+      return;
+    }
+
+    // Every response on but every-wrong off: non-error feedback only (no Try again / wrong sound).
+    if (this.feedbackEveryResponse()) {
+      if (this.feedbackBorder()) this._flashCellBorder(tappedCell);
+      if (isFreeRecall) this._play('neutral');
     }
   }
 
@@ -1811,18 +1802,6 @@ export class AppComponent {
     this.trialTestCells.set([]);
   }
 
-  private _shouldGiveFeedback(isCorrect: boolean, isFirstTap: boolean, isFirstWrong: boolean) {
-    if (this.feedbackEveryResponse()) return true;
-    if (!isCorrect) return this.feedbackEveryError() || isFirstWrong;
-    return isFirstTap;
-  }
-
-  /** Standard test: ignore repeat taps on already-pressed targets (legacy tap_mode off). */
-  private _shouldIgnoreRepeatTap(choice: number, expected: number): boolean {
-    if (this.testMode() !== this.TestMode.Standard) return false;
-    return this.pressed().includes(choice) && choice !== expected;
-  }
-
   private _legacyExpectedAtProgress(sequence: number[], correctBefore: number) {
     return sequence[Math.min(correctBefore, Math.max(0, sequence.length - 1))];
   }
@@ -1995,7 +1974,7 @@ export class AppComponent {
     for (const trial of this.results()) {
       const seq = trial.sequence;
       const letters = this._targetLetters(seq);
-      // Include automatic demo step presses (one per sequence step); skip ignored repeats.
+      // Include automatic demo step presses; never drop live taps (multi-taps always recorded).
       const recordable = trial.touches.filter((t) => !t.ignored);
       const pressesSoFar: number[] = [];
       const meta = trial.report;
@@ -2035,7 +2014,7 @@ export class AppComponent {
           this._legacyBool(meta.feedbackBorder),
           this._legacyBool(meta.playSound),
           this._legacyBool(meta.freeRecall),
-          this._legacyBool(this.testMode() !== this.TestMode.Standard),
+          'True',
           this._legacyBool(meta.progressCorrectOnly),
         ]);
       }

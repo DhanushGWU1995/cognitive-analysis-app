@@ -9,6 +9,8 @@ type TrialTouch = {
   gridCell: number;
   expected: number;
   correct: boolean;
+  /** Re-tap of an already-correct step — recorded, never an error. */
+  repeat: boolean;
   ignored: boolean;
   automatic: boolean;
 };
@@ -175,8 +177,14 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
               <input type="number" min="0" max="12" [value]="distractorsN()" (input)="distractorsN.set(+$any($event.target).value)" />
             </label>
             <label>
-              <div class="lbl">Study timer (seconds per item)</div>
-              <input type="number" min="1" max="10" [value]="studySeconds()" (input)="studySeconds.set(+$any($event.target).value)" />
+              <div class="lbl">Study timer (seconds per item; 0 = no wait)</div>
+              <input
+                type="number"
+                min="0"
+                max="10"
+                [value]="studySeconds()"
+                (input)="studySeconds.set(+$any($event.target).value)"
+              />
             </label>
           </div>
 
@@ -269,8 +277,22 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
               </label>
             </div>
             <p class="muted small">
-              <b>Every response</b> on: feedback for every tap. Off: no response feedback, ever.
-              <b>Every wrong tap</b> on: error cue (wrong sound / Try again) on mistakes. Off: no error cue, ever.
+              <b>Every response</b> on: feedback on the first touch of each step. Off: no response feedback, ever.
+              <b>Every wrong tap</b> on: error cue on true mistakes. Off: no error cue, ever. Re-taps of an
+              already-correct item are never errors and stay silent (Spatial and Object, all modes).
+            </p>
+            <div class="flag-grid" style="margin-top: 10px">
+              <label class="flag">
+                <input
+                  type="checkbox"
+                  [checked]="disappearOnCorrect()"
+                  (change)="disappearOnCorrect.set($any($event.target).checked)"
+                />
+                <span>Disappear after correct touch</span>
+              </label>
+            </div>
+            <p class="muted small">
+              When checked, the touched picture or location hides after a correct step (both tasks, all modes).
             </p>
           </div>
 
@@ -278,9 +300,9 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
             <h2>Automatic demonstration</h2>
             <p class="muted small">
               On demo trials the computer highlights each correct step in order (border and sound always on). The
-              teacher says “Watch!” — the child does not tap. Teacher study/practice is skipped on demo trials; the
-              automatic watch is the demonstration. Set <b>Highlights per step</b> to repeat each sequence item before
-              advancing (e.g. 3 flashes on location 1, then location 4).
+              teacher says “Watch!” — the child does not tap. Teacher study is skipped and the study timer is not
+              used on automatic trials. Set <b>Highlights per step</b> to repeat each sequence item before advancing
+              (e.g. 3 flashes on location 1, then location 4).
             </p>
             <div class="flag-grid">
               <label class="flag">
@@ -681,7 +703,8 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
                     [src]="'assets/pics/' + pad3(picIdInGridCell(cell)) + '.jpg'"
                     alt=""
                     draggable="false"
-                    loading="lazy"
+                    loading="eager"
+                    decoding="async"
                   />
                 </div>
               </ng-container>
@@ -818,10 +841,12 @@ export class AppComponent {
   readonly feedbackBorder = signal(true);
   readonly feedbackStepNumber = signal(true);
   readonly feedbackSmiley = signal(true);
-  /** Sound + pill on every tap (correct and wrong). If false, only the first tap gets them. */
+  /** Sound + pill on first touch of each step. */
   readonly feedbackEveryResponse = signal(true);
-  /** Sound + Try again on every wrong tap. If false, only the first wrong tap per trial. */
+  /** Sound + Try again on true wrong taps (never on same-item re-taps). */
   readonly feedbackEveryError = signal(true);
+  /** Hide the cell/picture after a correct touch (Spatial and Object). */
+  readonly disappearOnCorrect = signal(false);
   readonly testMode = signal<(typeof this.TestMode)[keyof typeof this.TestMode]>(
     this.TestMode.AdvanceWhenCorrect,
   );
@@ -843,6 +868,8 @@ export class AppComponent {
   readonly countdown = signal(0);
   readonly pressed = signal<number[]>([]);
   readonly pressedOrder = signal<Array<{ cell: number; step: number }>>([]);
+  /** Grid cells hidden after a correct touch when disappearOnCorrect is on. */
+  readonly disappearedCells = signal<Set<number>>(new Set());
   readonly feedback = signal<'correct' | 'wrong' | null>(null);
   readonly showCongrats = signal(false);
   /** True after the teacher continues from study-ready into test for the current trial. */
@@ -941,7 +968,7 @@ export class AppComponent {
 
   readonly canStart = computed(() => {
     const okId = this.subjectId().trim().length >= 2;
-    return okId && this.trials() >= 1 && this.stepsNum() >= 1 && this.studySeconds() >= 1;
+    return okId && this.trials() >= 1 && this.stepsNum() >= 1 && this.studySeconds() >= 0;
   });
 
   constructor() {
@@ -1052,6 +1079,7 @@ export class AppComponent {
     this.stepIndex.set(0);
     this.pressed.set([]);
     this.pressedOrder.set([]);
+    this.disappearedCells.set(new Set());
     this.feedback.set(null);
     this.showCongrats.set(false);
     this._clearBorderFlashes();
@@ -1307,6 +1335,7 @@ export class AppComponent {
     this.sessionDate = new Date();
     this.sessionStartedAt = performance.now();
     this.totalTrialsNum.set(this.trials());
+    void this._preloadSessionAssets();
     this._beginTrial();
     this.trialStartedAt = performance.now();
     this.screen.set('run');
@@ -1436,6 +1465,7 @@ export class AppComponent {
     this.stepIndex.set(0);
     this.pressed.set([]);
     this.pressedOrder.set([]);
+    this.disappearedCells.set(new Set());
     this.feedback.set(null);
     this.trialLocked = false;
     if (this.taskType() === this.TaskType.Location) {
@@ -1464,7 +1494,14 @@ export class AppComponent {
     this._stopTimer();
     this.phase.set('study');
     this.feedback.set(null);
-    this.countdown.set(this.studySeconds());
+    const secs = Math.max(0, this.studySeconds());
+    this.countdown.set(secs);
+
+    // 0 = no study wait (both tasks, all modes): paint once then advance.
+    if (secs <= 0) {
+      this.timer = window.setTimeout(() => this._advanceStudyOrTest(), 50);
+      return;
+    }
 
     const tick = () => {
       const left = this.countdown();
@@ -1509,7 +1546,7 @@ export class AppComponent {
     const expected = Number(this.expectedNext());
     const presses = this.pressed();
     const isFreeRecall = this.testMode() === this.TestMode.FreeRecall;
-    // Re-tap of an already-correct step (same location/picture): not an error in any mode.
+    // Re-tap of an already-correct step (same location/picture): never an error (A/B/C, both tasks).
     const isRepeat = presses.includes(choiceId);
     const ok = !isRepeat && choiceId === expected;
 
@@ -1520,14 +1557,15 @@ export class AppComponent {
       choice: choiceId,
       gridCell: tappedCell,
       expected,
-      correct: ok,
+      correct: ok || isRepeat, // repeats are never scored as errors
+      repeat: isRepeat,
       ignored: false,
       automatic: false,
     });
 
     this.trialTapCount++;
 
-    // Repeat of an already-selected correct item: record only — silent, never ends the trial.
+    // Repeat: record only — silent, never ends the trial, no feedback.
     if (isRepeat) return;
 
     this._applyTapFeedback(ok, isFreeRecall, tappedCell);
@@ -1547,9 +1585,18 @@ export class AppComponent {
     const next = [...presses, choiceId];
     this.pressed.set(next);
     this.pressedOrder.set([...this.pressedOrder(), { cell: choiceId, step: next.length }]);
+    if (this.disappearOnCorrect()) {
+      this._hideCellAfterCorrect(tappedCell);
+    }
     if (this._isSequenceComplete(next)) {
       this._completeTrial(next);
     }
+  }
+
+  private _hideCellAfterCorrect(cell: number) {
+    const next = new Set(this.disappearedCells());
+    next.add(cell);
+    this.disappearedCells.set(next);
   }
 
   /**
@@ -1688,7 +1735,7 @@ export class AppComponent {
       trialsNum,
       totalTrialsNum: Math.max(1, this.totalTrialsNum()),
       stepsNum: Math.max(1, this.stepsNum()),
-      studySeconds: Math.max(1, this.studySeconds()),
+      studySeconds: Math.max(0, this.studySeconds()),
       itiSeconds: Math.max(1, this.itiSeconds()),
       distractorsN: Math.max(0, this.distractorsN()),
       feedbackBorder: this.feedbackBorder(),
@@ -1709,12 +1756,14 @@ export class AppComponent {
     this.autoHighlightCell.set(null);
     this.pressed.set([]);
     this.pressedOrder.set([]);
+    this.disappearedCells.set(new Set());
     this.feedback.set(null);
     this._clearBorderFlashes();
 
     let step = 0;
     let repeatIndex = 0;
-    const stepMs = Math.max(800, this.studySeconds() * 1000);
+    // Automatic watch never uses the study timer — fixed short highlight for both tasks.
+    const stepMs = 800;
 
     const finishDemo = () => {
       this.automaticPlayback.set(false);
@@ -1755,6 +1804,7 @@ export class AppComponent {
           gridCell: cell,
           expected: item,
           correct: true,
+          repeat: false,
           ignored: false,
           automatic: true,
         });
@@ -1870,6 +1920,7 @@ export class AppComponent {
     this.trialIndex.set(t);
     this.pressed.set([]);
     this.pressedOrder.set([]);
+    this.disappearedCells.set(new Set());
     this.feedback.set(null);
     this.showCongrats.set(false);
     this._clearBorderFlashes();
@@ -1923,6 +1974,19 @@ export class AppComponent {
       }
     }
     return progress;
+  }
+
+  /** True if choice was already completed earlier in the correct sequence prefix. */
+  private _isRepeatOfCompletedItem(choice: number, pressesBefore: number[], sequence: number[]) {
+    let progress = 0;
+    const completed = new Set<number>();
+    for (const c of pressesBefore) {
+      if (progress < sequence.length && Number(c) === Number(sequence[progress])) {
+        completed.add(Number(c));
+        progress++;
+      }
+    }
+    return completed.has(Number(choice));
   }
 
   private _legacyPicFileName(id: number) {
@@ -1992,7 +2056,10 @@ export class AppComponent {
         const correctBefore = this._correctProgress(pressesBefore, seq);
         const expectedId = this._legacyExpectedAtProgress(seq, correctBefore);
         const isLast = i === recordable.length - 1;
-        const touchCorrect = touch.choice === expectedId;
+        // Repeats of already-correct items are never errors in the report.
+        const isRepeatTouch =
+          touch.repeat || this._isRepeatOfCompletedItem(touch.choice, pressesBefore, seq);
+        const touchCorrect = isRepeatTouch || touch.choice === expectedId;
 
         rows.push([
           subject,
@@ -2118,6 +2185,7 @@ export class AppComponent {
   isGridCellDisabled(cell: number) {
     if (this.phase() !== 'test') return true;
     if (this.automaticPlayback() || this.trialLocked) return true;
+    if (this.disappearedCells().has(cell)) return true;
     if (this.taskType() === this.TaskType.Location) {
       return !this.trialTestCells().includes(cell);
     }
@@ -2126,6 +2194,7 @@ export class AppComponent {
 
   isGridCellDim(cell: number) {
     if (this.phase() !== 'test') return false;
+    if (this.disappearedCells().has(cell)) return true;
     if (this.taskType() === this.TaskType.Location) {
       return !this.trialTestCells().includes(cell);
     }
@@ -2134,6 +2203,7 @@ export class AppComponent {
 
   gridStepBadge(cell: number): number | null {
     if (this.phase() !== 'test') return null;
+    if (this.disappearedCells().has(cell)) return null;
     if (this.taskType() === this.TaskType.Location) {
       return this.pressedBadges()[cell] ?? null;
     }
@@ -2144,6 +2214,7 @@ export class AppComponent {
 
   showImageInGridCell(cell: number) {
     if (this.phase() === 'studyReady') return false;
+    if (this.phase() === 'test' && this.disappearedCells().has(cell)) return false;
     if (this.taskType() === this.TaskType.Location) {
       return (
         (this.phase() === 'study' && this.isGridCellActive(cell)) ||
@@ -2238,6 +2309,74 @@ export class AppComponent {
       return pool.slice(0, n);
     }
     return Array.from({ length: n }, () => 1 + Math.floor(Math.random() * 16));
+  }
+
+  /**
+   * Warm picture + sound caches before the session (helps museum / slow Wi‑Fi).
+   * Shared for Spatial and Object — preloads every picture id used in programmed sequences.
+   */
+  private async _preloadSessionAssets() {
+    const ids = new Set<number>();
+    const trials = Math.max(1, this.trials());
+    const steps = Math.max(1, this.stepsNum());
+    const rows =
+      this.taskType() === this.TaskType.Location
+        ? this.locationSequences()
+        : this.pictureSequences();
+    for (let t = 0; t < Math.min(trials, rows.length); t++) {
+      for (const id of (rows[t] ?? []).slice(0, steps)) {
+        ids.add(Number(id));
+      }
+    }
+    // Object task: also warm a small distractor band so test layouts are snappy.
+    if (this.taskType() === this.TaskType.Picture) {
+      for (let i = 1; i <= Math.min(24, 99); i++) ids.add(i);
+    } else {
+      // Spatial uses a random filler pic per trial — warm common ids.
+      for (let i = 1; i <= 12; i++) ids.add(i);
+    }
+
+    const imageLoads = [...ids].map(
+      (id) =>
+        new Promise<void>((resolve) => {
+          const img = new Image();
+          img.onload = () => resolve();
+          img.onerror = () => resolve();
+          img.src = `assets/pics/${this.pad3(id)}.jpg`;
+        }),
+    );
+
+    const sounds = [
+      'assets/sfx/ding2.mp3',
+      'assets/sfx/whoosh1.wav',
+      'assets/sfx/applause.mp3',
+    ];
+    const soundLoads = sounds.map(
+      (src) =>
+        new Promise<void>((resolve) => {
+          const audio = new Audio();
+          audio.preload = 'auto';
+          audio.oncanplaythrough = () => resolve();
+          audio.onerror = () => resolve();
+          audio.src = src;
+          // Kick fetch without playing.
+          void audio.load();
+          window.setTimeout(() => resolve(), 4000);
+        }),
+    );
+
+    // Congrats video — start buffering in the background.
+    try {
+      const video = document.createElement('video');
+      video.preload = 'auto';
+      video.muted = true;
+      video.src = 'assets/video/congrats.mp4';
+      void video.load();
+    } catch {
+      /* ignore */
+    }
+
+    await Promise.allSettled([...imageLoads, ...soundLoads]);
   }
 
   pad3(n: number) {

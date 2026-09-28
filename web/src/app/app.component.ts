@@ -1509,9 +1509,11 @@ export class AppComponent {
     const expected = Number(this.expectedNext());
     const presses = this.pressed();
     const isFreeRecall = this.testMode() === this.TestMode.FreeRecall;
-    const ok = choiceId === expected;
+    // Re-tap of an already-correct step (same location/picture): not an error in any mode.
+    const isRepeat = presses.includes(choiceId);
+    const ok = !isRepeat && choiceId === expected;
 
-    // Always record every tap in every test mode (including multi-taps / extras).
+    // Always record every tap (Spatial and Object share this path).
     this._appendTouch({
       press: this.trialTouches().length + 1,
       ms: this._touchElapsedMs(),
@@ -1524,9 +1526,12 @@ export class AppComponent {
     });
 
     this.trialTapCount++;
+
+    // Repeat of an already-selected correct item: record only — silent, never ends the trial.
+    if (isRepeat) return;
+
     this._applyTapFeedback(ok, isFreeRecall, tappedCell);
 
-    // Standard: any wrong / multi-tap that is not the next expected item ends the trial (still recorded).
     if (!ok && this.testMode() === this.TestMode.Standard) {
       this.trialWrongCount++;
       this._failTrialAndAdvance();
@@ -1548,9 +1553,10 @@ export class AppComponent {
   }
 
   /**
-   * Feedback flags (absolute on/off for all modes):
-   * - Every response ON → feedback on every tap; OFF → no response feedback, ever.
-   * - Every wrong tap ON → error cue on mistakes; OFF → no error cue, ever.
+   * Feedback for the first touch of a step only (repeats are handled above and stay silent).
+   * - Every response ON → feedback on that first tap; OFF → no response feedback, ever.
+   * - Every wrong tap ON → error cue on true mistakes; OFF → no error cue, ever.
+   * Same rules for Spatial and Object tasks.
    */
   private _applyTapFeedback(ok: boolean, isFreeRecall: boolean, tappedCell: number) {
     if (ok) {
@@ -1566,7 +1572,7 @@ export class AppComponent {
       return;
     }
 
-    // Wrong tap
+    // True wrong tap (not a repeat of an already-correct item)
     if (this.feedbackEveryError()) {
       if (this.feedbackBorder()) this._flashCellBorder(tappedCell);
       this.feedback.set('wrong');
@@ -1838,7 +1844,7 @@ export class AppComponent {
       updated.delete(cell);
       this.borderFlashCells.set(updated);
       this.borderFlashTimers.delete(cell);
-    }, 2000);
+    }, 500);
     this.borderFlashTimers.set(cell, timerId);
   }
 

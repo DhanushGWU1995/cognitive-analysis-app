@@ -1,0 +1,7 @@
+Cheer / reward sounds from Mixkit free SFX (https://mixkit.co):
+cheer_chimes.mp3   — Winning chimes
+cheer_yay.mp3      — Fairy cartoon success voice
+cheer_applause.mp3 — Animated small group applause
+
+Also used in-task:
+ding2.mp3, whoosh1.wav

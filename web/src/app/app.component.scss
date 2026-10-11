@@ -609,6 +609,39 @@ input {
   transform: translateX(-50%);
 }
 
+.reward-setup {
+  margin-top: 18px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.reward-setup h2 {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.reward-setup .muted {
+  margin: 0 0 12px;
+}
+
+.reward-form {
+  margin-top: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.reward-select {
+  height: 42px;
+  border-radius: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.14);
+  padding: 0 12px;
+  font-size: 14px;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.9);
+}
+
 .congrats {
   position: fixed;
   inset: 0;
@@ -714,6 +747,75 @@ input {
   font-size: clamp(16px, 2.8vw, 20px);
   font-weight: 800;
   color: rgba(15, 23, 42, 0.72);
+}
+
+.congrats-card--correct {
+  background: linear-gradient(165deg, #ecfdf5 0%, #d1fae5 100%);
+  box-shadow:
+    0 0 0 1px rgba(16, 185, 129, 0.35),
+    0 28px 80px rgba(15, 23, 42, 0.28);
+}
+
+.surprise-stage {
+  position: relative;
+  margin: 0 auto 12px;
+  width: min(280px, 70vw);
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  border-radius: 28px;
+  background: linear-gradient(145deg, #fef3c7 0%, #fde68a 40%, #fbcfe8 100%);
+  overflow: hidden;
+}
+
+.surprise-hero {
+  font-size: clamp(72px, 18vw, 120px);
+  line-height: 1;
+  animation: surprise-pop 700ms ease-in-out infinite;
+  filter: drop-shadow(0 10px 20px rgba(15, 23, 42, 0.2));
+  z-index: 1;
+}
+
+.surprise-burst {
+  position: absolute;
+  font-size: clamp(28px, 6vw, 40px);
+  animation: surprise-float 1.4s ease-in-out infinite;
+}
+
+.surprise-burst.b1 { top: 10%; left: 12%; animation-delay: 0s; }
+.surprise-burst.b2 { top: 14%; right: 12%; animation-delay: 0.25s; }
+.surprise-burst.b3 { bottom: 12%; left: 40%; animation-delay: 0.5s; }
+
+.surprise-stage[data-id='clap'] {
+  background: linear-gradient(145deg, #fef9c3 0%, #fdba74 50%, #f9a8d4 100%);
+}
+.surprise-stage[data-id='stars'] {
+  background: linear-gradient(145deg, #e0e7ff 0%, #fde68a 45%, #fef3c7 100%);
+}
+.surprise-stage[data-id='jump'] {
+  background: linear-gradient(145deg, #dcfce7 0%, #a7f3d0 50%, #bae6fd 100%);
+}
+.surprise-stage[data-id='party'] {
+  background: linear-gradient(145deg, #fce7f3 0%, #fde68a 40%, #ddd6fe 100%);
+}
+.surprise-stage[data-id='song'] {
+  background: linear-gradient(145deg, #ede9fe 0%, #fbcfe8 50%, #fecdd3 100%);
+}
+.surprise-stage[data-id='rocket'] {
+  background: linear-gradient(145deg, #0f172a 0%, #312e81 45%, #7c3aed 100%);
+}
+.surprise-stage[data-id='rocket'] .surprise-hero {
+  filter: drop-shadow(0 0 18px rgba(253, 224, 71, 0.55));
+}
+
+@keyframes surprise-pop {
+  0%, 100% { transform: translateY(0) scale(1) rotate(-4deg); }
+  50% { transform: translateY(-10px) scale(1.1) rotate(4deg); }
+}
+
+@keyframes surprise-float {
+  0%, 100% { transform: translateY(0) scale(1); opacity: 0.85; }
+  50% { transform: translateY(-12px) scale(1.15); opacity: 1; }
 }
 
 @keyframes congrats-backdrop-in {

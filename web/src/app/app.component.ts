@@ -78,6 +78,40 @@ const LEGACY_REPORT_HEADER = [
   'ProgressCorrectOnly',
 ] as const;
 
+/** Short kid-friendly reward clips (Mixkit free stock). Playback capped by reward length (≤5s). */
+const REWARD_VIDEOS = {
+  kids: [
+    { id: 'kids_clap', src: 'assets/video/reward/kids_clap.mp4', title: 'You did it!', sub: 'Clap clap!' },
+    { id: 'kids_party', src: 'assets/video/reward/kids_party.mp4', title: 'Party time!', sub: 'Woohoo!' },
+    { id: 'kids_laugh', src: 'assets/video/reward/kids_laugh.mp4', title: 'So funny!', sub: 'Great job!' },
+  ],
+  apes: [
+    { id: 'ape_cute', src: 'assets/video/reward/ape_cute.mp4', title: 'Monkey high-five!', sub: 'You rock!' },
+    { id: 'ape_baby', src: 'assets/video/reward/ape_baby.mp4', title: 'Cute ape!', sub: 'Nice work!' },
+    { id: 'ape_jump', src: 'assets/video/reward/ape_jump.mp4', title: 'Jump!', sub: 'Keep going!' },
+  ],
+} as const;
+
+type RewardVideoClip = (typeof REWARD_VIDEOS.kids)[number] | (typeof REWARD_VIDEOS.apes)[number];
+
+const ALL_REWARD_VIDEOS: RewardVideoClip[] = [...REWARD_VIDEOS.kids, ...REWARD_VIDEOS.apes];
+
+/** Fallback CSS celebrations if a video pool is empty. */
+const SURPRISE_REWARDS: Array<{
+  id: string;
+  emoji: string;
+  burst: string;
+  title: string;
+  sub: string;
+}> = [
+  { id: 'clap', emoji: '👏', burst: '✨', title: 'Yay!', sub: 'Clap clap — you did it!' },
+  { id: 'stars', emoji: '⭐', burst: '🌟', title: 'Super star!', sub: 'Shiny work!' },
+  { id: 'jump', emoji: '🐰', burst: '💗', title: 'Jump!', sub: 'Hop hop — great job!' },
+  { id: 'party', emoji: '🎉', burst: '🎊', title: 'Party time!', sub: 'Woohoo!' },
+  { id: 'song', emoji: '🎵', burst: '🎶', title: 'Sing!', sub: 'What a tune!' },
+  { id: 'rocket', emoji: '🚀', burst: '💫', title: 'Blast off!', sub: 'To the moon!' },
+];
+
 const DEFAULT_LOCATION_ROWS: number[][] = [
   [13, 6],
   [10, 3],
@@ -336,6 +370,76 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
                 />
               </label>
             </div>
+          </div>
+
+          <div class="reward-setup">
+            <h2>Reward screen</h2>
+            <p class="muted small">
+              Shown after a correct trial (Spatial and Object, all test modes). Automatic watch demos stay quiet.
+            </p>
+            <div class="test-mode-options">
+              <label class="test-mode-card" [class.selected]="rewardMode() === RewardMode.None">
+                <input
+                  type="radio"
+                  name="rewardMode"
+                  [checked]="rewardMode() === RewardMode.None"
+                  (change)="rewardMode.set(RewardMode.None)"
+                />
+                <span class="test-mode-title">No reward</span>
+                <span class="test-mode-desc">Advance to the next trial with no celebration screen.</span>
+              </label>
+              <label class="test-mode-card" [class.selected]="rewardMode() === RewardMode.Correct">
+                <input
+                  type="radio"
+                  name="rewardMode"
+                  [checked]="rewardMode() === RewardMode.Correct"
+                  (change)="rewardMode.set(RewardMode.Correct)"
+                />
+                <span class="test-mode-title">Audio / visual: Correct</span>
+                <span class="test-mode-desc">Short “Correct!” card with sound. No video.</span>
+              </label>
+              <label class="test-mode-card" [class.selected]="rewardMode() === RewardMode.Video">
+                <input
+                  type="radio"
+                  name="rewardMode"
+                  [checked]="rewardMode() === RewardMode.Video"
+                  (change)="rewardMode.set(RewardMode.Video)"
+                />
+                <span class="test-mode-title">Video reward</span>
+                <span class="test-mode-desc">Kid-friendly video or Surprise mix (cute short clips).</span>
+              </label>
+            </div>
+            <div class="form reward-form" *ngIf="rewardMode() !== RewardMode.None">
+              <label>
+                <div class="lbl">Reward length (seconds, max 5)</div>
+                <input
+                  type="number"
+                  min="1"
+                  max="5"
+                  [value]="rewardSeconds()"
+                  (input)="setRewardSeconds(+$any($event.target).value)"
+                />
+              </label>
+              <label *ngIf="rewardMode() === RewardMode.Video">
+                <div class="lbl">Video reward type</div>
+                <select
+                  class="reward-select"
+                  [value]="videoRewardStyle()"
+                  (change)="videoRewardStyle.set($any($event.target).value)"
+                >
+                  <option [value]="VideoRewardStyle.Kids">Kids</option>
+                  <option [value]="VideoRewardStyle.Apes">Apes</option>
+                  <option [value]="VideoRewardStyle.Surprise">Surprise (random short clips)</option>
+                </select>
+              </label>
+            </div>
+            <p class="muted small" *ngIf="rewardMode() === RewardMode.Video">
+              <ng-container [ngSwitch]="videoRewardStyle()">
+                <span *ngSwitchCase="VideoRewardStyle.Kids">Kids: clapping, laughing, celebrating (short clips).</span>
+                <span *ngSwitchCase="VideoRewardStyle.Apes">Apes: cute baby monkeys / jumping ape clips.</span>
+                <span *ngSwitchDefault>Surprise: random pick from kids + apes each trial — capped by reward length (≤ 5s).</span>
+              </ng-container>
+            </p>
           </div>
 
           <div class="seq-editor" *ngIf="taskType() === TaskType.Picture">
@@ -769,11 +873,16 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
         *ngIf="screen() === 'run' && showCongrats()"
         role="dialog"
         aria-live="polite"
-        aria-label="Congratulations"
+        aria-label="Reward"
       >
         <div class="congrats-backdrop"></div>
-        <div class="congrats-card">
-          <div class="congrats-orbit" aria-hidden="true">
+        <div
+          class="congrats-card"
+          [class.congrats-card--correct]="activeRewardKind() === 'correct'"
+          [class.congrats-card--surprise]="activeRewardKind() === 'surprise'"
+          [attr.data-surprise]="activeSurpriseId()"
+        >
+          <div class="congrats-orbit" aria-hidden="true" *ngIf="activeRewardKind() !== 'correct'">
             <span class="orbit-item o1">✨</span>
             <span class="orbit-item o2">⭐</span>
             <span class="orbit-item o3">🎊</span>
@@ -781,19 +890,42 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
             <span class="orbit-item o5">✨</span>
             <span class="orbit-item o6">🎉</span>
           </div>
-          <div class="congrats-hero">🎉</div>
-          <div class="congrats-video-wrap">
-            <video
-              class="congrats-video"
-              src="assets/video/congrats.mp4"
-              autoplay
-              muted
-              playsinline
-              preload="auto"
-            ></video>
-          </div>
-          <h2 class="congrats-title">You did it!</h2>
-          <p class="congrats-sub">Great job — keep going!</p>
+
+          <!-- Audio/visual Correct -->
+          <ng-container *ngIf="activeRewardKind() === 'correct'">
+            <div class="congrats-hero">✅</div>
+            <h2 class="congrats-title">Correct!</h2>
+            <p class="congrats-sub">Nice work!</p>
+          </ng-container>
+
+          <!-- Kids / Apes / Surprise video -->
+          <ng-container *ngIf="activeRewardKind() === 'video' && activeRewardVideo() as clip">
+            <div class="congrats-hero">🎉</div>
+            <div class="congrats-video-wrap">
+              <video
+                class="congrats-video"
+                [src]="clip.src"
+                autoplay
+                muted
+                playsinline
+                preload="auto"
+              ></video>
+            </div>
+            <h2 class="congrats-title">{{ clip.title }}</h2>
+            <p class="congrats-sub">{{ clip.sub }}</p>
+          </ng-container>
+
+          <!-- Fallback CSS celebration (only if no video clip) -->
+          <ng-container *ngIf="activeRewardKind() === 'surprise' && activeSurprise()">
+            <div class="surprise-stage" [attr.data-id]="activeSurprise()!.id" aria-hidden="true">
+              <span class="surprise-burst b1">{{ activeSurprise()!.burst }}</span>
+              <span class="surprise-burst b2">{{ activeSurprise()!.burst }}</span>
+              <span class="surprise-burst b3">{{ activeSurprise()!.burst }}</span>
+              <div class="surprise-hero">{{ activeSurprise()!.emoji }}</div>
+            </div>
+            <h2 class="congrats-title">{{ activeSurprise()!.title }}</h2>
+            <p class="congrats-sub">{{ activeSurprise()!.sub }}</p>
+          </ng-container>
         </div>
       </div>
     </div>
@@ -826,6 +958,18 @@ export class AppComponent {
     AdvanceWhenCorrect: 'advanceWhenCorrect',
   } as const;
 
+  readonly RewardMode = {
+    None: 'none',
+    Correct: 'correct',
+    Video: 'video',
+  } as const;
+
+  readonly VideoRewardStyle = {
+    Kids: 'kids',
+    Apes: 'apes',
+    Surprise: 'surprise',
+  } as const;
+
   readonly screen = signal<'home' | 'setup' | 'run' | 'results'>('home');
   readonly taskType = signal<(typeof this.TaskType)[keyof typeof this.TaskType]>(this.TaskType.Location);
 
@@ -856,6 +1000,19 @@ export class AppComponent {
   readonly automaticDemo = signal(false);
   readonly demoTrials = signal(0);
   readonly demoHighlightsPerStep = signal(1);
+
+  /** End-of-trial reward (Spatial + Object, all modes; skipped on automatic demos). */
+  readonly rewardMode = signal<(typeof this.RewardMode)[keyof typeof this.RewardMode]>(
+    this.RewardMode.Video,
+  );
+  readonly videoRewardStyle = signal<(typeof this.VideoRewardStyle)[keyof typeof this.VideoRewardStyle]>(
+    this.VideoRewardStyle.Kids,
+  );
+  readonly rewardSeconds = signal(3);
+  readonly activeRewardKind = signal<'correct' | 'video' | 'surprise' | null>(null);
+  readonly activeRewardVideo = signal<RewardVideoClip | null>(null);
+  readonly activeSurprise = signal<(typeof SURPRISE_REWARDS)[number] | null>(null);
+  readonly activeSurpriseId = computed(() => this.activeSurprise()?.id ?? '');
 
   // Runtime
   readonly trialIndex = signal(0);
@@ -1082,6 +1239,9 @@ export class AppComponent {
     this.disappearedCells.set(new Set());
     this.feedback.set(null);
     this.showCongrats.set(false);
+    this.activeRewardKind.set(null);
+    this.activeSurprise.set(null);
+    this.activeRewardVideo.set(null);
     this._clearBorderFlashes();
     this.sessionStudyDone.set(false);
     this.sequenceChangedPromptOpen.set(false);
@@ -1654,21 +1814,85 @@ export class AppComponent {
     const isDemo = this.isDemoTrial();
     this._recordTrialResult(presses, correct, ms, isDemo);
 
-    // Only a correct-in-order sequence earns congrats; otherwise advance without reward.
+    // Only a correct-in-order sequence earns a reward; otherwise advance quietly.
     if (!correct) {
       this._scheduleAdvance(700);
       return;
     }
 
-    // Watch demos: advance quietly without the live-trial congrats burst.
+    // Watch demos: advance quietly without the live-trial reward.
     if (isDemo) {
       this._scheduleAdvance(500);
       return;
     }
 
+    this._playRewardThenAdvance();
+  }
+
+  setRewardSeconds(raw: number) {
+    const n = Number.isFinite(raw) ? raw : 3;
+    this.rewardSeconds.set(Math.max(1, Math.min(5, Math.round(n))));
+  }
+
+  /** Play configured reward (or skip), then advance. Same for Spatial and Object. */
+  private _playRewardThenAdvance() {
+    const mode = this.rewardMode();
+    if (mode === this.RewardMode.None) {
+      this._scheduleAdvance(350);
+      return;
+    }
+
+    const ms = Math.max(1, Math.min(5, this.rewardSeconds())) * 1000;
+
+    if (mode === this.RewardMode.Correct) {
+      this._play('correct');
+      this._showReward('correct', null, null, ms);
+      this._scheduleAdvance(ms + 120);
+      return;
+    }
+
+    // Video reward — kids, apes, or surprise random from both pools
+    const clip = this._pickRewardVideo();
     this._play('success');
-    this._congratsBurst();
-    this._scheduleAdvance(900);
+    if (clip) {
+      this._showReward('video', null, clip, ms);
+    } else {
+      const fallback = SURPRISE_REWARDS[Math.floor(Math.random() * SURPRISE_REWARDS.length)];
+      this._showReward('surprise', fallback, null, ms);
+    }
+    this._scheduleAdvance(ms + 120);
+  }
+
+  private _pickRewardVideo(): RewardVideoClip | null {
+    const style = this.videoRewardStyle();
+    const pool: RewardVideoClip[] =
+      style === this.VideoRewardStyle.Kids
+        ? [...REWARD_VIDEOS.kids]
+        : style === this.VideoRewardStyle.Apes
+          ? [...REWARD_VIDEOS.apes]
+          : ALL_REWARD_VIDEOS;
+    if (!pool.length) return null;
+    return pool[Math.floor(Math.random() * pool.length)] ?? null;
+  }
+
+  private _showReward(
+    kind: 'correct' | 'video' | 'surprise',
+    surprise: (typeof SURPRISE_REWARDS)[number] | null,
+    video: RewardVideoClip | null,
+    visibleMs: number,
+  ) {
+    this.activeRewardKind.set(kind);
+    this.activeSurprise.set(surprise);
+    this.activeRewardVideo.set(video);
+    this.showCongrats.set(true);
+    if (this.congratsTimer != null) window.clearTimeout(this.congratsTimer);
+    this.congratsTimer = window.setTimeout(() => {
+      this.showCongrats.set(false);
+      this.activeRewardKind.set(null);
+      this.activeSurprise.set(null);
+      this.activeRewardVideo.set(null);
+      this.congratsTimer = null;
+    }, visibleMs);
   }
 
   private _failTrialAndAdvance() {
@@ -1923,6 +2147,9 @@ export class AppComponent {
     this.disappearedCells.set(new Set());
     this.feedback.set(null);
     this.showCongrats.set(false);
+    this.activeRewardKind.set(null);
+    this.activeSurprise.set(null);
+    this.activeRewardVideo.set(null);
     this._clearBorderFlashes();
     this.studyReturnToTest.set(false);
     this._beginTrial();
@@ -2114,12 +2341,6 @@ export class AppComponent {
     }
   }
 
-  private _congratsBurst() {
-    this.showCongrats.set(true);
-    if (this.congratsTimer != null) window.clearTimeout(this.congratsTimer);
-    this.congratsTimer = window.setTimeout(() => this.showCongrats.set(false), 3200);
-  }
-
   /** Neutral ding on each automatic watch step (independent of feedback toggles). */
   private _playAutomaticStepSound() {
     this._play('neutral');
@@ -2141,8 +2362,8 @@ export class AppComponent {
     this.activeAudio = [audio];
     void audio.play().catch(() => {});
     if (name === 'success') {
-      // Cap applause length so it doesn't linger after completion
-      window.setTimeout(() => this._stopAllAudio(), 2200);
+      const capMs = Math.max(800, Math.min(5000, this.rewardSeconds() * 1000));
+      window.setTimeout(() => this._stopAllAudio(), capMs);
     }
   }
 
@@ -2365,15 +2586,17 @@ export class AppComponent {
         }),
     );
 
-    // Congrats video — start buffering in the background.
-    try {
-      const video = document.createElement('video');
-      video.preload = 'auto';
-      video.muted = true;
-      video.src = 'assets/video/congrats.mp4';
-      void video.load();
-    } catch {
-      /* ignore */
+    // Reward videos — start buffering in the background.
+    for (const clip of ALL_REWARD_VIDEOS) {
+      try {
+        const video = document.createElement('video');
+        video.preload = 'auto';
+        video.muted = true;
+        video.src = clip.src;
+        void video.load();
+      } catch {
+        /* ignore */
+      }
     }
 
     await Promise.allSettled([...imageLoads, ...soundLoads]);

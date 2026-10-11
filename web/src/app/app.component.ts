@@ -2132,23 +2132,20 @@ export class AppComponent {
     return sequence[Math.min(correctBefore, Math.max(0, sequence.length - 1))];
   }
 
-  private _legacyItemLabel(
-    choice: number,
-    letters: Record<number, string>,
-    taskType: 'location' | 'picture',
-  ) {
-    if (taskType === 'location') return String(choice);
-    return letters[choice] ?? `X${choice}`;
+  /**
+   * Label a tap by its place in the trial sequence (A = 1st target, B = 2nd, …).
+   * Same for Spatial and Object. Distractors / unknown items are "X".
+   * Example: sequence [13, 6], taps 13,13,13,6 → Progress "AAAB".
+   */
+  private _legacyItemLabel(choice: number, letters: Record<number, string>) {
+    return letters[Number(choice)] ?? 'X';
   }
 
   private _legacyProgressString(
     pressesIncludingCurrent: number[],
     letters: Record<number, string>,
-    taskType: 'location' | 'picture',
   ) {
-    return pressesIncludingCurrent
-      .map((choice) => this._legacyItemLabel(choice, letters, taskType))
-      .join('');
+    return pressesIncludingCurrent.map((choice) => this._legacyItemLabel(choice, letters)).join('');
   }
 
   private _flashCellBorder(cell: number) {
@@ -2272,10 +2269,11 @@ export class AppComponent {
     return `${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
   }
 
+  /** Map each target id (picture or spatial cell) → A, B, C… by sequence order. */
   private _targetLetters(sequence: number[]) {
     const map: Record<number, string> = {};
     for (let i = 0; i < sequence.length; i++) {
-      map[sequence[i]] = String.fromCharCode(65 + i);
+      map[Number(sequence[i])] = String.fromCharCode(65 + i); // A, B, C…
     }
     return map;
   }
@@ -2341,9 +2339,9 @@ export class AppComponent {
           String(meta.trialInList),
           String(meta.listNum),
           this._legacySequenceBy(trial.taskType),
-          this._legacyItemLabel(touch.choice, letters, trial.taskType),
-          this._legacyItemLabel(expectedId, letters, trial.taskType),
-          this._legacyProgressString(pressesSoFar, letters, trial.taskType),
+          this._legacyItemLabel(touch.choice, letters),
+          this._legacyItemLabel(expectedId, letters),
+          this._legacyProgressString(pressesSoFar, letters),
           this._legacyBool(touchCorrect),
           this._legacyTrialAccuracy(trial.correct, isLast),
           (touch.ms / 1000).toFixed(3),

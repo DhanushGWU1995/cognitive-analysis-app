@@ -78,25 +78,19 @@ const LEGACY_REPORT_HEADER = [
   'ProgressCorrectOnly',
 ] as const;
 
-/** Short kid-friendly reward clips (Mixkit free stock). Playback capped by reward length (≤5s). */
-const REWARD_VIDEOS = {
-  kids: [
-    { id: 'kids_clap', src: 'assets/video/reward/kids_clap.mp4', title: 'You did it!', sub: 'Clap clap!' },
-    { id: 'kids_party', src: 'assets/video/reward/kids_party.mp4', title: 'Party time!', sub: 'Woohoo!' },
-    { id: 'kids_laugh', src: 'assets/video/reward/kids_laugh.mp4', title: 'So funny!', sub: 'Great job!' },
-  ],
-  apes: [
-    { id: 'ape_cute', src: 'assets/video/reward/ape_cute.mp4', title: 'Monkey high-five!', sub: 'You rock!' },
-    { id: 'ape_baby', src: 'assets/video/reward/ape_baby.mp4', title: 'Cute ape!', sub: 'Nice work!' },
-    { id: 'ape_jump', src: 'assets/video/reward/ape_jump.mp4', title: 'Jump!', sub: 'Keep going!' },
-  ],
-} as const;
+/** Short kid-friendly celebration clips (Mixkit free stock). Playback capped by reward length (≤5s). */
+const REWARD_VIDEOS = [
+  { id: 'kids_clap', src: 'assets/video/reward/kids_clap.mp4', title: 'You did it!', sub: 'Clap clap — great job!' },
+  { id: 'kids_clap_out', src: 'assets/video/reward/kids_clap_out.mp4', title: 'Yay!', sub: 'Everyone is cheering for you!' },
+  { id: 'kids_party', src: 'assets/video/reward/kids_party.mp4', title: 'Party time!', sub: 'You finished — woohoo!' },
+  { id: 'kids_laugh', src: 'assets/video/reward/kids_laugh.mp4', title: 'So happy!', sub: 'What wonderful work!' },
+  { id: 'kids_toddler', src: 'assets/video/reward/kids_toddler.mp4', title: 'Smile!', sub: 'You did such a good job!' },
+  { id: 'kids_cheer', src: 'assets/video/reward/kids_cheer.mp4', title: 'Hooray!', sub: 'Keep up the great work!' },
+] as const;
 
-type RewardVideoClip = (typeof REWARD_VIDEOS.kids)[number] | (typeof REWARD_VIDEOS.apes)[number];
+type RewardVideoClip = (typeof REWARD_VIDEOS)[number];
 
-const ALL_REWARD_VIDEOS: RewardVideoClip[] = [...REWARD_VIDEOS.kids, ...REWARD_VIDEOS.apes];
-
-/** Fallback CSS celebrations if a video pool is empty. */
+/** Cute visual fallbacks if a video cannot play. */
 const SURPRISE_REWARDS: Array<{
   id: string;
   emoji: string;
@@ -106,10 +100,17 @@ const SURPRISE_REWARDS: Array<{
 }> = [
   { id: 'clap', emoji: '👏', burst: '✨', title: 'Yay!', sub: 'Clap clap — you did it!' },
   { id: 'stars', emoji: '⭐', burst: '🌟', title: 'Super star!', sub: 'Shiny work!' },
-  { id: 'jump', emoji: '🐰', burst: '💗', title: 'Jump!', sub: 'Hop hop — great job!' },
-  { id: 'party', emoji: '🎉', burst: '🎊', title: 'Party time!', sub: 'Woohoo!' },
-  { id: 'song', emoji: '🎵', burst: '🎶', title: 'Sing!', sub: 'What a tune!' },
-  { id: 'rocket', emoji: '🚀', burst: '💫', title: 'Blast off!', sub: 'To the moon!' },
+  { id: 'jump', emoji: '🐰', burst: '💗', title: 'Jump for joy!', sub: 'Hop hop — great job!' },
+  { id: 'party', emoji: '🎉', burst: '🎊', title: 'Party time!', sub: 'Woohoo — you finished!' },
+  { id: 'song', emoji: '🎵', burst: '🎶', title: 'Sing along!', sub: 'What a wonderful job!' },
+  { id: 'heart', emoji: '💖', burst: '✨', title: 'So proud!', sub: 'You did amazing!' },
+];
+
+/** Layered cheer for successful trial completion (congratulatory, kid-friendly). */
+const CHEER_LAYERS: Array<{ src: string; volume: number; delayMs: number }> = [
+  { src: 'assets/sfx/cheer_chimes.mp3', volume: 0.85, delayMs: 0 },
+  { src: 'assets/sfx/cheer_yay.mp3', volume: 0.9, delayMs: 100 },
+  { src: 'assets/sfx/cheer_applause.mp3', volume: 0.72, delayMs: 220 },
 ];
 
 const DEFAULT_LOCATION_ROWS: number[][] = [
@@ -406,7 +407,7 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
                   (change)="rewardMode.set(RewardMode.Video)"
                 />
                 <span class="test-mode-title">Video reward</span>
-                <span class="test-mode-desc">Kid-friendly video or Surprise mix (cute short clips).</span>
+                <span class="test-mode-desc">Cute kids celebration clips with congratulatory cheer music.</span>
               </label>
             </div>
             <div class="form reward-form" *ngIf="rewardMode() !== RewardMode.None">
@@ -427,18 +428,14 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
                   [value]="videoRewardStyle()"
                   (change)="videoRewardStyle.set($any($event.target).value)"
                 >
-                  <option [value]="VideoRewardStyle.Kids">Kids</option>
-                  <option [value]="VideoRewardStyle.Apes">Apes</option>
+                  <option [value]="VideoRewardStyle.Kids">Kids celebration</option>
                   <option [value]="VideoRewardStyle.Surprise">Surprise (random short clips)</option>
                 </select>
               </label>
             </div>
             <p class="muted small" *ngIf="rewardMode() === RewardMode.Video">
-              <ng-container [ngSwitch]="videoRewardStyle()">
-                <span *ngSwitchCase="VideoRewardStyle.Kids">Kids: clapping, laughing, celebrating (short clips).</span>
-                <span *ngSwitchCase="VideoRewardStyle.Apes">Apes: cute baby monkeys / jumping ape clips.</span>
-                <span *ngSwitchDefault>Surprise: random pick from kids + apes each trial — capped by reward length (≤ 5s).</span>
-              </ng-container>
+              Short clips of kids clapping, laughing, and celebrating — plus cheer music when they finish.
+              Surprise picks a different clip each trial (≤ 5s).
             </p>
           </div>
 
@@ -898,7 +895,7 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
             <p class="congrats-sub">Nice work!</p>
           </ng-container>
 
-          <!-- Kids / Apes / Surprise video -->
+          <!-- Kids / Surprise celebration video -->
           <ng-container *ngIf="activeRewardKind() === 'video' && activeRewardVideo() as clip">
             <div class="congrats-hero">🎉</div>
             <div class="congrats-video-wrap">
@@ -966,7 +963,6 @@ export class AppComponent {
 
   readonly VideoRewardStyle = {
     Kids: 'kids',
-    Apes: 'apes',
     Surprise: 'surprise',
   } as const;
 
@@ -1851,28 +1847,26 @@ export class AppComponent {
       return;
     }
 
-    // Video reward — kids, apes, or surprise random from both pools
-    const clip = this._pickRewardVideo();
-    this._play('success');
-    if (clip) {
-      this._showReward('video', null, clip, ms);
-    } else {
+    // Video reward — kid-friendly celebration clips + cheer music
+    if (this.videoRewardStyle() === this.VideoRewardStyle.Surprise && Math.random() < 0.25) {
       const fallback = SURPRISE_REWARDS[Math.floor(Math.random() * SURPRISE_REWARDS.length)];
       this._showReward('surprise', fallback, null, ms);
+    } else {
+      const clip = this._pickRewardVideo();
+      if (clip) {
+        this._showReward('video', null, clip, ms);
+      } else {
+        const fallback = SURPRISE_REWARDS[Math.floor(Math.random() * SURPRISE_REWARDS.length)];
+        this._showReward('surprise', fallback, null, ms);
+      }
     }
+    this._play('success');
     this._scheduleAdvance(ms + 120);
   }
 
   private _pickRewardVideo(): RewardVideoClip | null {
-    const style = this.videoRewardStyle();
-    const pool: RewardVideoClip[] =
-      style === this.VideoRewardStyle.Kids
-        ? [...REWARD_VIDEOS.kids]
-        : style === this.VideoRewardStyle.Apes
-          ? [...REWARD_VIDEOS.apes]
-          : ALL_REWARD_VIDEOS;
-    if (!pool.length) return null;
-    return pool[Math.floor(Math.random() * pool.length)] ?? null;
+    if (!REWARD_VIDEOS.length) return null;
+    return REWARD_VIDEOS[Math.floor(Math.random() * REWARD_VIDEOS.length)] ?? null;
   }
 
   private _showReward(
@@ -2347,24 +2341,37 @@ export class AppComponent {
   }
 
   private _play(name: 'correct' | 'wrong' | 'success' | 'neutral') {
-    const map: Record<typeof name, string> = {
+    if (name === 'success') {
+      this._playCheerMusic();
+      return;
+    }
+    const map: Record<'correct' | 'wrong' | 'neutral', string> = {
       correct: 'assets/sfx/ding2.mp3',
       wrong: 'assets/sfx/whoosh1.wav',
-      success: 'assets/sfx/applause.mp3',
       neutral: 'assets/sfx/ding2.mp3',
     };
     this._stopAllAudio();
     const audio = new Audio(map[name]);
-    const volume =
-      name === 'success' ? 0.75 : name === 'neutral' ? 0.55 : 0.9;
-    audio.volume = volume;
+    audio.volume = name === 'neutral' ? 0.55 : 0.9;
     audio.currentTime = 0;
     this.activeAudio = [audio];
     void audio.play().catch(() => {});
-    if (name === 'success') {
-      const capMs = Math.max(800, Math.min(5000, this.rewardSeconds() * 1000));
-      window.setTimeout(() => this._stopAllAudio(), capMs);
+  }
+
+  /** Congratulatory cheer for finishing a trial successfully. */
+  private _playCheerMusic() {
+    this._stopAllAudio();
+    for (const layer of CHEER_LAYERS) {
+      window.setTimeout(() => {
+        const audio = new Audio(layer.src);
+        audio.volume = layer.volume;
+        audio.currentTime = 0;
+        this.activeAudio = [...this.activeAudio, audio];
+        void audio.play().catch(() => {});
+      }, layer.delayMs);
     }
+    const capMs = Math.max(1200, Math.min(5000, this.rewardSeconds() * 1000));
+    window.setTimeout(() => this._stopAllAudio(), capMs);
   }
 
   private _stopAllAudio() {
@@ -2570,7 +2577,7 @@ export class AppComponent {
     const sounds = [
       'assets/sfx/ding2.mp3',
       'assets/sfx/whoosh1.wav',
-      'assets/sfx/applause.mp3',
+      ...CHEER_LAYERS.map((l) => l.src),
     ];
     const soundLoads = sounds.map(
       (src) =>
@@ -2587,7 +2594,7 @@ export class AppComponent {
     );
 
     // Reward videos — start buffering in the background.
-    for (const clip of ALL_REWARD_VIDEOS) {
+    for (const clip of REWARD_VIDEOS) {
       try {
         const video = document.createElement('video');
         video.preload = 'auto';

@@ -895,13 +895,14 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
             <p class="congrats-sub">Nice work!</p>
           </ng-container>
 
-          <!-- Kids / Surprise celebration video -->
+          <!-- Kids / Surprise celebration video (track playId so each pick remounts the <video>) -->
           <ng-container *ngIf="activeRewardKind() === 'video' && activeRewardVideo() as clip">
             <div class="congrats-hero">🎉</div>
             <div class="congrats-video-wrap">
               <video
+                *ngFor="let play of rewardVideoPlays(); trackBy: trackRewardPlay"
                 class="congrats-video"
-                [src]="clip.src"
+                [src]="play.src"
                 autoplay
                 muted
                 playsinline
@@ -1007,8 +1008,19 @@ export class AppComponent {
   readonly rewardSeconds = signal(3);
   readonly activeRewardKind = signal<'correct' | 'video' | 'surprise' | null>(null);
   readonly activeRewardVideo = signal<RewardVideoClip | null>(null);
+  /** Bumps each reward so the <video> element is destroyed/recreated (src changes alone often do not reload). */
+  readonly rewardPlayNonce = signal(0);
+  readonly rewardVideoPlays = computed(() => {
+    const clip = this.activeRewardVideo();
+    if (!clip) return [] as Array<RewardVideoClip & { playId: string }>;
+    return [{ ...clip, playId: `${clip.id}-${this.rewardPlayNonce()}` }];
+  });
   readonly activeSurprise = signal<(typeof SURPRISE_REWARDS)[number] | null>(null);
   readonly activeSurpriseId = computed(() => this.activeSurprise()?.id ?? '');
+  /** Shuffle bags so Surprise (and Kids) cycle through all clips before repeating. */
+  private rewardVideoBag: RewardVideoClip[] = [];
+  private surpriseCssBag: (typeof SURPRISE_REWARDS)[number][] = [];
+  private lastRewardVideoId: string | null = null;
 
   // Runtime
   readonly trialIndex = signal(0);
@@ -1848,25 +1860,64 @@ export class AppComponent {
     }
 
     // Video reward — kid-friendly celebration clips + cheer music
-    if (this.videoRewardStyle() === this.VideoRewardStyle.Surprise && Math.random() < 0.25) {
-      const fallback = SURPRISE_REWARDS[Math.floor(Math.random() * SURPRISE_REWARDS.length)];
-      this._showReward('surprise', fallback, null, ms);
+    // Surprise: mostly rotating video clips; occasional CSS celebration for variety.
+    if (this.videoRewardStyle() === this.VideoRewardStyle.Surprise && Math.random() < 0.15) {
+      this._showReward('surprise', this._pickSurpriseCss(), null, ms);
     } else {
       const clip = this._pickRewardVideo();
       if (clip) {
         this._showReward('video', null, clip, ms);
       } else {
-        const fallback = SURPRISE_REWARDS[Math.floor(Math.random() * SURPRISE_REWARDS.length)];
-        this._showReward('surprise', fallback, null, ms);
+        this._showReward('surprise', this._pickSurpriseCss(), null, ms);
       }
     }
     this._play('success');
     this._scheduleAdvance(ms + 120);
   }
 
+  trackRewardPlay(_: number, play: { playId: string }) {
+    return play.playId;
+  }
+
+  /**
+   * Draw the next reward clip from a shuffled bag (no immediate repeat).
+   * Ensures Surprise cycles through every clip before any repeats.
+   */
   private _pickRewardVideo(): RewardVideoClip | null {
     if (!REWARD_VIDEOS.length) return null;
-    return REWARD_VIDEOS[Math.floor(Math.random() * REWARD_VIDEOS.length)] ?? null;
+    if (this.rewardVideoBag.length === 0) {
+      this.rewardVideoBag = this._shuffledRewardVideos();
+      // Avoid starting a fresh bag on the same clip we just showed.
+      if (
+        this.rewardVideoBag.length > 1 &&
+        this.lastRewardVideoId &&
+        this.rewardVideoBag[0]?.id === this.lastRewardVideoId
+      ) {
+        const first = this.rewardVideoBag.shift()!;
+        this.rewardVideoBag.push(first);
+      }
+    }
+    const clip = this.rewardVideoBag.shift() ?? null;
+    if (clip) this.lastRewardVideoId = clip.id;
+    return clip;
+  }
+
+  private _pickSurpriseCss(): (typeof SURPRISE_REWARDS)[number] {
+    if (this.surpriseCssBag.length === 0) {
+      this.surpriseCssBag = [...SURPRISE_REWARDS].sort(() => Math.random() - 0.5);
+    }
+    return this.surpriseCssBag.shift() ?? SURPRISE_REWARDS[0]!;
+  }
+
+  private _shuffledRewardVideos(): RewardVideoClip[] {
+    const bag = [...REWARD_VIDEOS];
+    for (let i = bag.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const tmp = bag[i]!;
+      bag[i] = bag[j]!;
+      bag[j] = tmp;
+    }
+    return bag;
   }
 
   private _showReward(
@@ -1878,6 +1929,7 @@ export class AppComponent {
     this.activeRewardKind.set(kind);
     this.activeSurprise.set(surprise);
     this.activeRewardVideo.set(video);
+    if (video) this.rewardPlayNonce.update((n) => n + 1);
     this.showCongrats.set(true);
     if (this.congratsTimer != null) window.clearTimeout(this.congratsTimer);
     this.congratsTimer = window.setTimeout(() => {

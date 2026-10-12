@@ -212,7 +212,7 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
               <input type="number" min="0" max="12" [value]="distractorsN()" (input)="distractorsN.set(+$any($event.target).value)" />
             </label>
             <label>
-              <div class="lbl">Study timer (seconds per item; 0 = no wait)</div>
+              <div class="lbl">Study timer (seconds per item; 0 = skip study, no flash)</div>
               <input
                 type="number"
                 min="0"
@@ -1566,6 +1566,11 @@ export class AppComponent {
     if (!this.isDemoTrial()) {
       this.liveStudyShownForSharedSequence = true;
     }
+    // 0 = skip study entirely (both tasks, all modes) — no sequence flash.
+    if (Math.max(0, this.studySeconds()) <= 0) {
+      this._finishStudyWithoutDisplay();
+      return;
+    }
     this.phase.set('study');
     this.countdown.set(this.studySeconds());
     this._runStudyTick();
@@ -1608,7 +1613,8 @@ export class AppComponent {
     if (this.taskType() === this.TaskType.Picture) {
       this._buildPicStudyLayout();
     }
-    this._runStudyTick();
+    // Manual "Show study again": if timer is 0, use a short default so the teacher can still preview.
+    this._runStudyTick(Math.max(0, this.studySeconds()) || 2);
   }
 
   private _beginTrial() {
@@ -1658,24 +1664,27 @@ export class AppComponent {
     }
   }
 
-  private _runStudyTick() {
+  /**
+   * Timed study step. Pass `secondsPerItem` for manual replay overrides.
+   * When seconds is 0, never paint the sequence (avoids a one-frame flash).
+   */
+  private _runStudyTick(secondsPerItem?: number) {
     this._stopTimer();
-    this.phase.set('study');
-    this.feedback.set(null);
-    const secs = Math.max(0, this.studySeconds());
-    this.countdown.set(secs);
-
-    // 0 = no study wait (both tasks, all modes): paint once then advance.
+    const secs = Math.max(0, secondsPerItem ?? this.studySeconds());
     if (secs <= 0) {
-      this.timer = window.setTimeout(() => this._advanceStudyOrTest(), 50);
+      this._finishStudyWithoutDisplay();
       return;
     }
+
+    this.phase.set('study');
+    this.feedback.set(null);
+    this.countdown.set(secs);
 
     const tick = () => {
       const left = this.countdown();
       if (left <= 1) {
         this.countdown.set(0);
-        window.setTimeout(() => this._advanceStudyOrTest(), 250);
+        window.setTimeout(() => this._advanceStudyOrTest(secs), 250);
         return;
       }
       this.countdown.set(left - 1);
@@ -1685,22 +1694,30 @@ export class AppComponent {
     this.timer = window.setTimeout(tick, 1000);
   }
 
-  private _advanceStudyOrTest() {
-    const step = this.stepIndex();
-    const seq = this.trialSequence();
-    if (step + 1 < seq.length) {
-      this.stepIndex.set(step + 1);
-      this._runStudyTick();
-      return;
-    }
+  /** End teacher study without showing any sequence step on the grid. */
+  private _finishStudyWithoutDisplay() {
     this._stopTimer();
     this.stepIndex.set(0);
+    this.countdown.set(0);
+    this.feedback.set(null);
     if (this.studyReturnToTest()) {
       this.studyReturnToTest.set(false);
       this.phase.set('test');
       return;
     }
     this.phase.set('studyReady');
+  }
+
+  private _advanceStudyOrTest(secondsPerItem?: number) {
+    const step = this.stepIndex();
+    const seq = this.trialSequence();
+    const secs = Math.max(0, secondsPerItem ?? this.studySeconds());
+    if (step + 1 < seq.length) {
+      this.stepIndex.set(step + 1);
+      this._runStudyTick(secs);
+      return;
+    }
+    this._finishStudyWithoutDisplay();
   }
 
   onPick(choice: number, tappedCell: number) {

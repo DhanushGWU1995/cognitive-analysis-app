@@ -246,8 +246,9 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
                 />
                 <span class="test-mode-title">(B) Free recall</span>
                 <span class="test-mode-desc"
-                  >No Correct / Try again coaching by default. Every tap is recorded. Trial succeeds only when the
-                  full sequence is tapped in order (wrong taps are logged and do not advance the step).</span
+                  >Every tap is recorded. For an N-item sequence the trial ends after N touches in any order
+                  (targets or distractors). Succeeds if those N taps are the target items (any order). Use
+                  (C) if the trial should keep going until the sequence is correct.</span
                 >
               </label>
               <label class="test-mode-card" [class.selected]="testMode() === TestMode.AdvanceWhenCorrect">
@@ -1730,10 +1731,15 @@ export class AppComponent {
 
     const expected = Number(this.expectedNext());
     const presses = this.pressed();
+    const seq = this.trialSequence();
     const isFreeRecall = this.testMode() === this.TestMode.FreeRecall;
-    // Re-tap of an already-correct step (same location/picture): never an error (A/B/C, both tasks).
+    // Re-tap of an already-selected item: never an error (A/B/C, both tasks).
     const isRepeat = presses.includes(choiceId);
-    const ok = !isRepeat && choiceId === expected;
+    // Free recall: a tap is "good" if it is still a needed target (any order).
+    // Standard / Advance when correct: must match the next item in order.
+    const ok = isFreeRecall
+      ? !isRepeat && seq.some((id) => Number(id) === choiceId)
+      : !isRepeat && choiceId === expected;
 
     // Always record every tap (Spatial and Object share this path).
     this._appendTouch({
@@ -1761,8 +1767,25 @@ export class AppComponent {
       return;
     }
 
+    // --- Free recall: N touches (any order) end the trial ---
+    // Both tasks. Distractors count as a response slot; repeats do not.
+    // Exception / contrast: Advance when correct keeps going until in-order success.
+    if (isFreeRecall) {
+      if (!ok) this.trialWrongCount++;
+      const next = [...presses, choiceId];
+      this.pressed.set(next);
+      this.pressedOrder.set([...this.pressedOrder(), { cell: choiceId, step: next.length }]);
+      if (ok && this.disappearOnCorrect()) {
+        this._hideCellAfterCorrect(tappedCell);
+      }
+      if (next.length >= seq.length) {
+        this._completeTrial(next);
+      }
+      return;
+    }
+
+    // Standard + Advance when correct: only correct-in-order advances the step list.
     if (!ok) {
-      // Free recall + Advance when correct: keep going; extras stay in the report.
       this.trialWrongCount++;
       return;
     }
@@ -1820,9 +1843,19 @@ export class AppComponent {
     }
   }
 
+  /** Exact in-order match (Standard / Advance when correct success). */
   private _isSequenceComplete(presses: number[]) {
     const seq = this.trialSequence();
     return presses.length === seq.length && presses.every((value, index) => Number(value) === Number(seq[index]));
+  }
+
+  /** Free recall success: same targets as the sequence, any order (no extras/distractors). */
+  private _isFreeRecallCorrect(presses: number[]) {
+    const seq = this.trialSequence().map(Number);
+    if (presses.length !== seq.length) return false;
+    const need = [...seq].sort((a, b) => a - b);
+    const got = presses.map(Number).sort((a, b) => a - b);
+    return need.every((v, i) => v === got[i]);
   }
 
   private _appendTouch(touch: TrialTouch) {
@@ -1835,7 +1868,10 @@ export class AppComponent {
     this._hideTestGrid();
 
     const ms = Math.max(0, Math.round(performance.now() - this.trialStartedAt));
-    const correct = this._isSequenceComplete(presses);
+    const correct =
+      this.testMode() === this.TestMode.FreeRecall
+        ? this._isFreeRecallCorrect(presses)
+        : this._isSequenceComplete(presses);
     const isDemo = this.isDemoTrial();
     this._recordTrialResult(presses, correct, ms, isDemo);
 

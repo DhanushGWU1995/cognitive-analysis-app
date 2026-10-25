@@ -47,6 +47,22 @@ type TrialResult = {
   report: TrialReportMeta;
 };
 
+/** Browser/local backup so data survives refresh, crash, or quit before Excel download. */
+type SessionCheckpoint = {
+  version: 1;
+  savedAt: number;
+  downloaded: boolean;
+  subjectId: string;
+  taskType: 'location' | 'picture';
+  testMode: string;
+  trialsPlanned: number;
+  sessionEndedEarly: boolean;
+  sessionDateIso: string;
+  results: TrialResult[];
+};
+
+const SESSION_CHECKPOINT_KEY = 'select-toddler-session-checkpoint-v1';
+
 /** SELeCT legacy report columns (matches report_template.txt + ListNum before SequenceBy). */
 const LEGACY_REPORT_HEADER = [
   'Sub',
@@ -170,6 +186,20 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
         <section class="card" *ngIf="screen() === 'home'">
           <h1>Pick a game</h1>
           <p class="muted">Runs entirely in the browser (GitHub Pages). Works best in fullscreen.</p>
+
+          <div class="recovery-banner" *ngIf="pendingRecovery() as recovery">
+            <div class="recovery-title">Unsaved session backup found</div>
+            <p class="muted small">
+              Subject <b>{{ recovery.subjectId }}</b> · {{ recovery.results.length }} trial(s) ·
+              {{ recovery.taskType === 'location' ? 'Spatial' : 'Object' }} ·
+              saved {{ recoverySavedLabel() }}
+            </p>
+            <div class="actions" style="margin-top: 10px">
+              <button type="button" class="btn primary" (click)="downloadRecoveredReport()">Download backup report</button>
+              <button type="button" class="btn ghost" (click)="discardRecovery()">Discard</button>
+            </div>
+          </div>
+
           <div class="grid2">
             <button class="big-btn" (click)="goSetup(TaskType.Location)">
               <div class="emoji">📍</div>
@@ -846,16 +876,20 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
         <section class="card" *ngIf="screen() === 'results'">
           <h1>{{ sessionEndedEarly() ? 'Session ended early' : 'All finished!' }}</h1>
           <p class="muted">
-            Download a SELeCT-compatible Excel report (one row per press).
-            <span *ngIf="sessionEndedEarly()"> Data from trials completed (and any in-progress trial) was saved.</span>
+            A backup is kept in this device’s browser storage until you download.
+            <span *ngIf="sessionEndedEarly()"> Early Finish also saved any in-progress taps.</span>
+            <span *ngIf="reportAutoDownloaded()"> An Excel download was started automatically.</span>
           </p>
           <div class="actions">
-            <button class="btn ghost" (click)="screen.set('home')">New session</button>
+            <button class="btn ghost" (click)="goHomeFromResults()">New session</button>
             <button class="btn primary" [disabled]="results().length === 0" (click)="downloadReport()">
               Download Report
             </button>
           </div>
-          <div class="mini">Saved: {{ results().length }} / {{ trials() }} trial(s)</div>
+          <div class="mini">
+            Saved: {{ results().length }} / {{ trials() }} trial(s)
+            <span *ngIf="lastCheckpointAt()"> · backup {{ lastCheckpointLabel() }}</span>
+          </div>
         </section>
       </main>
 
@@ -1023,7 +1057,12 @@ export class AppComponent {
   readonly rewardSeconds = signal(3);
   /** True when the teacher stopped the session with Early Finish (results still downloadable). */
   readonly sessionEndedEarly = signal(false);
+  /** Undownloaded backup from a previous run (home-screen recovery). */
+  readonly pendingRecovery = signal<SessionCheckpoint | null>(null);
+  readonly lastCheckpointAt = signal<number | null>(null);
+  readonly reportAutoDownloaded = signal(false);
   readonly activeRewardKind = signal<'correct' | 'video' | 'surprise' | null>(null);
+  private pageHideHandler: (() => void) | null = null;
   readonly activeRewardVideo = signal<RewardVideoClip | null>(null);
   /** Bumps each reward so the <video> element is destroyed/recreated (src changes alone often do not reload). */
   readonly rewardPlayNonce = signal(0);
@@ -1154,6 +1193,9 @@ export class AppComponent {
   });
 
   constructor() {
+    this._refreshPendingRecovery();
+    this._installUnloadFlush();
+
     // Ensure no timers leak between screens
     effect(() => {
       const s = this.screen();
@@ -1228,7 +1270,51 @@ export class AppComponent {
   }
 
   exitDesktopApp() {
+    this._flushSessionForQuit();
     window.selectDesktop?.closeApp();
+  }
+
+  recoverySavedLabel() {
+    const at = this.pendingRecovery()?.savedAt;
+    if (!at) return '';
+    try {
+      return new Date(at).toLocaleString();
+    } catch {
+      return '';
+    }
+  }
+
+  lastCheckpointLabel() {
+    const at = this.lastCheckpointAt();
+    if (!at) return '';
+    try {
+      return new Date(at).toLocaleTimeString();
+    } catch {
+      return '';
+    }
+  }
+
+  downloadRecoveredReport() {
+    const cp = this.pendingRecovery() ?? this._loadCheckpoint();
+    if (!cp?.results?.length) return;
+    this.subjectId.set(cp.subjectId || 'subject');
+    this.taskType.set(cp.taskType);
+    this.trials.set(Math.max(1, cp.trialsPlanned || cp.results.length));
+    this.sessionEndedEarly.set(!!cp.sessionEndedEarly);
+    this.sessionDate = new Date(cp.sessionDateIso || Date.now());
+    this.results.set(cp.results);
+    this.downloadReport();
+    this._refreshPendingRecovery();
+  }
+
+  discardRecovery() {
+    this._clearCheckpoint();
+    this.pendingRecovery.set(null);
+  }
+
+  goHomeFromResults() {
+    this._refreshPendingRecovery();
+    this.screen.set('home');
   }
 
   goSetup(type: 'location' | 'picture') {
@@ -1251,8 +1337,12 @@ export class AppComponent {
     this._stopTimer();
     this._stopAutoDemo();
     this._stopAllAudio();
+    // Keep a local backup before wiping in-memory results.
+    this._captureInProgressTrialIfNeeded();
+    if (this.results().length > 0) this._persistCheckpoint(false);
     this._resetSessionProgress();
     this.sessionEndedEarly.set(false);
+    this._refreshPendingRecovery();
     this.screen.set('setup');
   }
 
@@ -1282,29 +1372,20 @@ export class AppComponent {
     this.sequenceChangedPromptOpen.set(false);
     this._clearBorderFlashes();
 
-    // Persist in-progress trial taps so nothing collected mid-trial is lost.
-    const trialNum = this.trialIndex() + 1;
-    const alreadyRecorded = this.results().some((r) => r.trial === trialNum);
-    const hasCollected =
-      this.trialTouches().length > 0 || this.pressed().length > 0;
-    if (!alreadyRecorded && hasCollected && this.phase() !== 'done') {
-      const ms = Math.max(0, Math.round(performance.now() - this.trialStartedAt));
-      const presses = this.pressed();
-      const correct =
-        this.testMode() === this.TestMode.FreeRecall
-          ? this._isFreeRecallCorrect(presses)
-          : this._isSequenceComplete(presses);
-      this._recordTrialResult(presses, correct, ms, this.isDemoTrial());
-    }
+    this._captureInProgressTrialIfNeeded();
 
     this.trialLocked = true;
     this.sessionEndedEarly.set(true);
     this.phase.set('done');
+    this._persistCheckpoint(false);
     this.screen.set('results');
+    this._autoDownloadReportIfPossible();
   }
 
   private _resetSessionProgress() {
     this.sessionEndedEarly.set(false);
+    this.reportAutoDownloaded.set(false);
+    this.lastCheckpointAt.set(null);
     this.results.set([]);
     this.trialIndex.set(0);
     this.stepIndex.set(0);
@@ -2108,6 +2189,8 @@ export class AppComponent {
         report: this._buildTrialReportMeta(trialIdx, taskType, sequence),
       },
     ]);
+    // Checkpoint after every completed trial so a crash mid-session does not lose data.
+    this._persistCheckpoint(false);
   }
 
   private _buildTrialReportMeta(
@@ -2300,7 +2383,9 @@ export class AppComponent {
       this._stopAllAudio();
       this.sessionEndedEarly.set(false);
       this.phase.set('done');
+      this._persistCheckpoint(false);
       this.screen.set('results');
+      this._autoDownloadReportIfPossible();
       return;
     }
     this.trialIndex.set(t);
@@ -2487,6 +2572,7 @@ export class AppComponent {
   }
 
   downloadReport() {
+    if (!this.results().length) return;
     const rows = this._buildLegacyReportRows();
     const worksheet = XLSX.utils.aoa_to_sheet(rows);
     const workbook = XLSX.utils.book_new();
@@ -2495,6 +2581,118 @@ export class AppComponent {
     const date = this._legacyDate();
     const time = this._legacyTimeStamp();
     XLSX.writeFile(workbook, `SST-SCP${subject}_${date}_${time}.xlsx`);
+    this._persistCheckpoint(true);
+    this._refreshPendingRecovery();
+  }
+
+  /** Save in-progress taps into results (used by Early Finish, Edit setup, and quit flush). */
+  private _captureInProgressTrialIfNeeded() {
+    if (this.phase() === 'done') return;
+    const trialNum = this.trialIndex() + 1;
+    if (this.results().some((r) => r.trial === trialNum)) return;
+    const hasCollected = this.trialTouches().length > 0 || this.pressed().length > 0;
+    if (!hasCollected) return;
+    const ms = Math.max(0, Math.round(performance.now() - this.trialStartedAt));
+    const presses = this.pressed();
+    const correct =
+      this.testMode() === this.TestMode.FreeRecall
+        ? this._isFreeRecallCorrect(presses)
+        : this._isSequenceComplete(presses);
+    this._recordTrialResult(presses, correct, ms, this.isDemoTrial());
+  }
+
+  private _autoDownloadReportIfPossible() {
+    if (!this.results().length || this.reportAutoDownloaded()) return;
+    // Defer so the results screen paints first; may be blocked without a user gesture in some browsers.
+    window.setTimeout(() => {
+      if (!this.results().length || this.reportAutoDownloaded()) return;
+      try {
+        this.downloadReport();
+        this.reportAutoDownloaded.set(true);
+      } catch {
+        /* backup still in localStorage */
+      }
+    }, 250);
+  }
+
+  private _flushSessionForQuit() {
+    try {
+      if (this.screen() === 'run') {
+        this._captureInProgressTrialIfNeeded();
+      }
+      if (this.results().length > 0) {
+        this._persistCheckpoint(false);
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  private _installUnloadFlush() {
+    if (typeof window === 'undefined' || this.pageHideHandler) return;
+    this.pageHideHandler = () => this._flushSessionForQuit();
+    window.addEventListener('pagehide', this.pageHideHandler);
+    window.addEventListener('beforeunload', this.pageHideHandler);
+  }
+
+  private _persistCheckpoint(downloaded: boolean) {
+    if (typeof localStorage === 'undefined') return;
+    if (!this.results().length) {
+      if (downloaded) this._clearCheckpoint();
+      return;
+    }
+    const payload: SessionCheckpoint = {
+      version: 1,
+      savedAt: Date.now(),
+      downloaded,
+      subjectId: this.subjectId().trim() || 'subject',
+      taskType: this.taskType(),
+      testMode: this.testMode(),
+      trialsPlanned: Math.max(1, this.trials()),
+      sessionEndedEarly: this.sessionEndedEarly(),
+      sessionDateIso: (this.sessionDate ?? new Date()).toISOString(),
+      results: this.results(),
+    };
+    try {
+      localStorage.setItem(SESSION_CHECKPOINT_KEY, JSON.stringify(payload));
+      this.lastCheckpointAt.set(payload.savedAt);
+      if (downloaded) this.pendingRecovery.set(null);
+    } catch {
+      /* quota / private mode */
+    }
+  }
+
+  private _loadCheckpoint(): SessionCheckpoint | null {
+    if (typeof localStorage === 'undefined') return null;
+    try {
+      const raw = localStorage.getItem(SESSION_CHECKPOINT_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as SessionCheckpoint;
+      if (!parsed?.results?.length) return null;
+      return parsed;
+    } catch {
+      return null;
+    }
+  }
+
+  private _clearCheckpoint() {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      localStorage.removeItem(SESSION_CHECKPOINT_KEY);
+    } catch {
+      /* ignore */
+    }
+    this.lastCheckpointAt.set(null);
+  }
+
+  private _refreshPendingRecovery() {
+    const cp = this._loadCheckpoint();
+    if (cp && !cp.downloaded && cp.results.length > 0) {
+      this.pendingRecovery.set(cp);
+      this.lastCheckpointAt.set(cp.savedAt);
+    } else {
+      this.pendingRecovery.set(null);
+    }
   }
 
   private _stopTimer() {

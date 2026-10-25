@@ -477,8 +477,8 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
               For each <b>unique sequence</b>, the first <b>N</b> trials of that sequence are ghost demos (constant N):
               the computer highlights each correct step in order (border + sound). The teacher says “Watch!” — the
               child does not tap. Example: N=2 with sequences A,A,A,B,B → two A demos, then live A; two B demos, then
-              live B. Teacher study / study timer are skipped on demo trials. Set <b>Highlights per step</b> to flash
-              each item more than once before advancing.
+              live B. Teacher study / study timer are skipped on demo trials. Use <b>Seconds per demo step</b> to slow
+              the watch pace; set <b>Highlights per step</b> to flash each item more than once before advancing.
             </p>
             <div class="flag-grid">
               <label class="flag">
@@ -498,6 +498,18 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
                   [value]="demoTrials()"
                   [disabled]="!automaticDemo()"
                   (input)="demoTrials.set(+$any($event.target).value)"
+                />
+              </label>
+              <label>
+                <div class="lbl">Seconds per demo step</div>
+                <input
+                  type="number"
+                  min="1"
+                  max="5"
+                  step="0.5"
+                  [value]="demoStepSeconds()"
+                  [disabled]="!automaticDemo()"
+                  (input)="setDemoStepSeconds(+$any($event.target).value)"
                 />
               </label>
               <label>
@@ -1185,6 +1197,8 @@ export class AppComponent {
   /** First N trials: computer highlights the answer; child watches (no taps). */
   readonly automaticDemo = signal(false);
   readonly demoTrials = signal(0);
+  /** How long each ghost-demo item stays highlighted (seconds). */
+  readonly demoStepSeconds = signal(2);
   readonly demoHighlightsPerStep = signal(1);
 
   /** End-of-trial reward (Spatial + Object, all modes; skipped on automatic demos). */
@@ -1415,6 +1429,12 @@ export class AppComponent {
     if (on && this.demoTrials() < 1) {
       this.demoTrials.set(1);
     }
+  }
+
+  setDemoStepSeconds(raw: number) {
+    const n = Number.isFinite(raw) ? raw : 2;
+    // Keep watch pace readable for toddlers (1–5s per highlighted item).
+    this.demoStepSeconds.set(Math.max(1, Math.min(5, Math.round(n * 2) / 2)));
   }
 
   setTestMode(mode: (typeof this.TestMode)[keyof typeof this.TestMode]) {
@@ -1980,10 +2000,11 @@ export class AppComponent {
       // Always rebuild mapping right before scheduling so the next ghost demo is not empty.
       this._ensureDemoLayoutReady();
       if (this.autoDemoStartTimer != null) window.clearTimeout(this.autoDemoStartTimer);
+      // Brief pause so “Watch!” is readable before the first highlight.
       this.autoDemoStartTimer = window.setTimeout(() => {
         this.autoDemoStartTimer = null;
         this._runAutomaticDemo();
-      }, 450);
+      }, 1200);
       return;
     }
   }
@@ -2213,7 +2234,7 @@ export class AppComponent {
     // Watch demos: advance quietly without the live-trial reward.
     if (isDemo) {
       this._stopAutoDemo();
-      this._scheduleAdvance(500);
+      this._scheduleAdvance(1500);
       return;
     }
 
@@ -2433,8 +2454,9 @@ export class AppComponent {
     let step = 0;
     let repeatIndex = 0;
     let layoutRetries = 0;
-    // Automatic watch never uses the study timer — fixed short highlight for both tasks.
-    const stepMs = 800;
+    // Automatic watch never uses the study timer — paced for toddlers to follow.
+    const stepMs = Math.round(Math.max(1, Math.min(5, this.demoStepSeconds())) * 1000);
+    const gapMs = Math.max(700, Math.round(stepMs * 0.4));
 
     const finishDemo = () => {
       if (gen !== this.autoDemoGeneration) return;
@@ -2447,7 +2469,12 @@ export class AppComponent {
       const presses = [...seq];
       this.pressed.set(presses);
       this.pressedOrder.set(presses.map((cell, index) => ({ cell, step: index + 1 })));
-      this._completeTrial(presses);
+      // Short beat after the last item before ending the watch trial.
+      this.autoDemoTimer = window.setTimeout(() => {
+        this.autoDemoTimer = null;
+        if (gen !== this.autoDemoGeneration) return;
+        this._completeTrial(presses);
+      }, Math.max(800, gapMs));
     };
 
     const playHighlight = () => {
@@ -2475,7 +2502,7 @@ export class AppComponent {
       }
 
       this.autoHighlightCell.set(cell);
-      this._flashCellBorder(cell);
+      this._flashCellBorder(cell, stepMs);
       this._playAutomaticStepSound();
 
       // Record one exportable press per sequence step (extra highlight flashes are UI-only).
@@ -2506,7 +2533,7 @@ export class AppComponent {
             repeatIndex = 0;
           }
           playHighlight();
-        }, 280);
+        }, gapMs);
       }, stepMs);
     };
 
@@ -2576,7 +2603,7 @@ export class AppComponent {
     return pressesIncludingCurrent.map((choice) => this._legacyItemLabel(choice, letters)).join('');
   }
 
-  private _flashCellBorder(cell: number) {
+  private _flashCellBorder(cell: number, durationMs = 500) {
     const next = new Set(this.borderFlashCells());
     next.add(cell);
     this.borderFlashCells.set(next);
@@ -2589,7 +2616,7 @@ export class AppComponent {
       updated.delete(cell);
       this.borderFlashCells.set(updated);
       this.borderFlashTimers.delete(cell);
-    }, 500);
+    }, Math.max(200, durationMs));
     this.borderFlashTimers.set(cell, timerId);
   }
 

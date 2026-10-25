@@ -94,15 +94,108 @@ const LEGACY_REPORT_HEADER = [
   'ProgressCorrectOnly',
 ] as const;
 
-/** Short kid-friendly celebration clips (Mixkit free stock). Playback capped by reward length (≤5s). */
+/** Dancer celebration clips (Subia / Mail Drop). Playback capped by reward length (≤5s). */
 const REWARD_VIDEOS = [
-  { id: 'kids_clap', src: 'assets/video/reward/kids_clap.mp4', title: 'You did it!', sub: 'Clap clap — great job!' },
-  { id: 'kids_clap_out', src: 'assets/video/reward/kids_clap_out.mp4', title: 'Yay!', sub: 'Everyone is cheering for you!' },
-  { id: 'kids_party', src: 'assets/video/reward/kids_party.mp4', title: 'Party time!', sub: 'You finished — woohoo!' },
-  { id: 'kids_laugh', src: 'assets/video/reward/kids_laugh.mp4', title: 'So happy!', sub: 'What wonderful work!' },
-  { id: 'kids_toddler', src: 'assets/video/reward/kids_toddler.mp4', title: 'Smile!', sub: 'You did such a good job!' },
-  { id: 'kids_cheer', src: 'assets/video/reward/kids_cheer.mp4', title: 'Hooray!', sub: 'Keep up the great work!' },
+  { id: 'dancer_01', src: 'assets/video/reward/dancer_01.mp4', title: 'You did it!', sub: 'Dance party — great job!' },
+  { id: 'dancer_02', src: 'assets/video/reward/dancer_02.mp4', title: 'Yay!', sub: 'Look at those moves!' },
+  { id: 'dancer_03', src: 'assets/video/reward/dancer_03.mp4', title: 'Party time!', sub: 'You finished — woohoo!' },
+  { id: 'dancer_04', src: 'assets/video/reward/dancer_04.mp4', title: 'So happy!', sub: 'What wonderful work!' },
+  { id: 'dancer_05', src: 'assets/video/reward/dancer_05.mp4', title: 'Smile!', sub: 'You did such a good job!' },
+  { id: 'dancer_06', src: 'assets/video/reward/dancer_06.mp4', title: 'Hooray!', sub: 'Keep up the great work!' },
+  { id: 'dancer_07', src: 'assets/video/reward/dancer_07.mp4', title: 'Awesome!', sub: 'Boogie on — nice work!' },
+  { id: 'dancer_08', src: 'assets/video/reward/dancer_08.mp4', title: 'Super!', sub: 'That was fantastic!' },
+  { id: 'dancer_09', src: 'assets/video/reward/dancer_09.mp4', title: 'Wow!', sub: 'You are a star!' },
+  { id: 'dancer_10', src: 'assets/video/reward/dancer_10.mp4', title: 'Yes!', sub: 'Celebrate — you did it!' },
 ] as const;
+
+/** Built-in Object-task pictures shipped as assets/pics/001.jpg … N.jpg. */
+const MAX_PIC_ID = 99;
+/** Custom uploads (in-app) get ids starting here; stored in IndexedDB on this device. */
+const CUSTOM_PIC_START = MAX_PIC_ID + 1;
+const CUSTOM_PICS_DB = 'select-custom-pics';
+const CUSTOM_PICS_STORE = 'pics';
+
+type CustomPicRecord = { id: number; mime: string; blob: Blob; addedAt: number };
+
+function openCustomPicsDb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    if (typeof indexedDB === 'undefined') {
+      reject(new Error('IndexedDB unavailable'));
+      return;
+    }
+    const req = indexedDB.open(CUSTOM_PICS_DB, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(CUSTOM_PICS_STORE)) {
+        db.createObjectStore(CUSTOM_PICS_STORE, { keyPath: 'id' });
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error ?? new Error('IndexedDB open failed'));
+  });
+}
+
+function idbReq<T>(req: IDBRequest<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error ?? new Error('IndexedDB request failed'));
+  });
+}
+
+async function listCustomPicRecords(): Promise<CustomPicRecord[]> {
+  const db = await openCustomPicsDb();
+  try {
+    const tx = db.transaction(CUSTOM_PICS_STORE, 'readonly');
+    const rows = await idbReq(tx.objectStore(CUSTOM_PICS_STORE).getAll() as IDBRequest<CustomPicRecord[]>);
+    return (rows ?? []).slice().sort((a, b) => a.id - b.id);
+  } finally {
+    db.close();
+  }
+}
+
+async function putCustomPicRecord(rec: CustomPicRecord): Promise<void> {
+  const db = await openCustomPicsDb();
+  try {
+    const tx = db.transaction(CUSTOM_PICS_STORE, 'readwrite');
+    await idbReq(tx.objectStore(CUSTOM_PICS_STORE).put(rec));
+  } finally {
+    db.close();
+  }
+}
+
+async function deleteCustomPicRecord(id: number): Promise<void> {
+  const db = await openCustomPicsDb();
+  try {
+    const tx = db.transaction(CUSTOM_PICS_STORE, 'readwrite');
+    await idbReq(tx.objectStore(CUSTOM_PICS_STORE).delete(id));
+  } finally {
+    db.close();
+  }
+}
+
+/** Downscale / re-encode uploads so IndexedDB stays small. */
+async function normalizeUploadImage(file: File): Promise<Blob> {
+  const bitmap = await createImageBitmap(file);
+  try {
+    const maxEdge = 640;
+    const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
+    const w = Math.max(1, Math.round(bitmap.width * scale));
+    const h = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Canvas unavailable');
+    ctx.drawImage(bitmap, 0, 0, w, h);
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.85),
+    );
+    if (!blob) throw new Error('Could not encode image');
+    return blob;
+  } finally {
+    bitmap.close();
+  }
+}
 
 type RewardVideoClip = (typeof REWARD_VIDEOS)[number];
 
@@ -526,7 +619,7 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
                       <button class="pick pick-visual" type="button" (click)="openPicPicker(0, si)">
                         <img
                           class="pick-thumb"
-                          [src]="'assets/pics/' + pad3(pictureSequences()[0][si]) + '.jpg'"
+                          [src]="picSrc(pictureSequences()[0][si])"
                           alt=""
                           loading="lazy"
                         />
@@ -553,7 +646,7 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
                     <button class="pick pick-visual" type="button" (click)="openPicPicker(ti, si)">
                       <img
                         class="pick-thumb"
-                        [src]="'assets/pics/' + pad3(pictureSequences()[ti][si]) + '.jpg'"
+                        [src]="picSrc(pictureSequences()[ti][si])"
                         alt=""
                         loading="lazy"
                       />
@@ -579,22 +672,47 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
                   }},
                   Step {{ picPickerStep() + 1 }}
                 </div>
-                <button class="btn ghost" type="button" (click)="closePicPicker()">Close</button>
+                <div class="picker-top-actions">
+                  <label class="btn ghost pic-upload-btn" [class.disabled]="picUploadBusy()">
+                    {{ picUploadBusy() ? 'Adding…' : 'Add pictures' }}
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif,image/*"
+                      multiple
+                      hidden
+                      [disabled]="picUploadBusy()"
+                      (change)="onCustomPicsSelected($event)"
+                    />
+                  </label>
+                  <button class="btn ghost" type="button" (click)="closePicPicker()">Close</button>
+                </div>
               </div>
               <p class="muted small pic-picker-hint">
-                Tap any picture to assign it. Duplicate pictures in the same trial are checked when you tap Start.
+                Tap any picture to assign it. Use <b>Add pictures</b> to upload new images on this device (saved for next
+                sessions). Duplicate pictures in the same trial are checked when you tap Start.
               </p>
               <div class="picker-grid">
-                <button
-                  class="picker-item"
-                  *ngFor="let pid of picIds"
-                  type="button"
-                  [class.pic-used]="isPicUsedElsewhereInTrial(picPickerTrial(), picPickerStep(), pid)"
-                  (click)="pickPic(pid)"
-                >
-                  <img class="picker-img" [src]="'assets/pics/' + pad3(pid) + '.jpg'" alt="" loading="lazy" />
-                  <div class="picker-id">{{ pad3(pid) }}</div>
-                </button>
+                <div class="picker-item-wrap" *ngFor="let pid of picIds()">
+                  <button
+                    class="picker-item"
+                    type="button"
+                    [class.pic-used]="isPicUsedElsewhereInTrial(picPickerTrial(), picPickerStep(), pid)"
+                    [class.pic-custom]="isCustomPic(pid)"
+                    (click)="pickPic(pid)"
+                  >
+                    <img class="picker-img" [src]="picSrc(pid)" alt="" loading="lazy" />
+                    <div class="picker-id">{{ pad3(pid) }}{{ isCustomPic(pid) ? ' · new' : '' }}</div>
+                  </button>
+                  <button
+                    *ngIf="isCustomPic(pid)"
+                    class="pic-remove"
+                    type="button"
+                    title="Remove uploaded picture"
+                    (click)="removeCustomPic(pid, $event)"
+                  >
+                    ×
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -841,7 +959,7 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
                 <div class="cell-media">
                   <img
                     class="pic"
-                    [src]="'assets/pics/' + pad3(picIdInGridCell(cell)) + '.jpg'"
+                    [src]="picSrc(picIdInGridCell(cell))"
                     alt=""
                     draggable="false"
                     loading="eager"
@@ -1111,8 +1229,14 @@ export class AppComponent {
 
   readonly pictureSequences = signal<number[][]>(DEFAULT_PICTURE_ROWS.map((row) => [...row]));
 
-  // Assets: pics are 001.jpg..099.jpg
-  readonly picIds = Array.from({ length: 99 }, (_v, i) => i + 1);
+  /** Built-in 1..MAX_PIC_ID plus any in-app uploads (ids ≥ CUSTOM_PIC_START). */
+  readonly customPicIds = signal<number[]>([]);
+  readonly picUploadBusy = signal(false);
+  private customPicUrlById = new Map<number, string>();
+  readonly picIds = computed(() => [
+    ...Array.from({ length: MAX_PIC_ID }, (_v, i) => i + 1),
+    ...this.customPicIds(),
+  ]);
 
   readonly results = signal<TrialResult[]>([]);
 
@@ -1197,6 +1321,7 @@ export class AppComponent {
   constructor() {
     this._refreshPendingRecovery();
     this._installUnloadFlush();
+    void this._loadCustomPics();
 
     // Ensure no timers leak between screens
     effect(() => {
@@ -1224,7 +1349,7 @@ export class AppComponent {
       const syncAll = this.sameSequenceForAllTrials();
       if (task === this.TaskType.Picture) {
         const cur = untracked(() => this.pictureSequences());
-        let next = this._normalizeSequences(cur, t, steps, 1, 99, DEFAULT_PICTURE_ROWS);
+        let next = this._normalizeSequences(cur, t, steps, 1, this.maxPicId(), DEFAULT_PICTURE_ROWS);
         if (syncAll) next = this._syncAllTrialsToMaster(next);
         this.pictureSequences.set(next);
         untracked(() => this._maybePromptSameSequenceForAllTrials(false));
@@ -1498,7 +1623,7 @@ export class AppComponent {
       t,
       steps,
       1,
-      isPicture ? 99 : 16,
+      isPicture ? this.maxPicId() : 16,
       seed,
     );
     if (isPicture) this.pictureSequences.set(next);
@@ -1510,7 +1635,7 @@ export class AppComponent {
       const t = Math.max(1, this.trials());
       const steps = Math.max(1, this.stepsNum());
       const next = this._syncAllTrialsToMaster(
-        this._normalizeSequences(this.pictureSequences(), t, steps, 1, 99, DEFAULT_PICTURE_ROWS),
+        this._normalizeSequences(this.pictureSequences(), t, steps, 1, this.maxPicId(), DEFAULT_PICTURE_ROWS),
       );
       this.pictureSequences.set(next);
     } else {
@@ -1531,7 +1656,7 @@ export class AppComponent {
     const isPicture = this.taskType() === this.TaskType.Picture;
     const seed = isPicture ? DEFAULT_PICTURE_ROWS : DEFAULT_LOCATION_ROWS;
     const cur = isPicture ? this.pictureSequences() : this.locationSequences();
-    const normalized = this._normalizeSequences(cur, t, steps, 1, isPicture ? 99 : 16, seed);
+    const normalized = this._normalizeSequences(cur, t, steps, 1, isPicture ? this.maxPicId() : 16, seed);
     const copied = [...normalized[trialIdx - 1]];
     const next = normalized.map((row, i) => (i === trialIdx ? copied : [...row]));
     if (isPicture) this.pictureSequences.set(next);
@@ -2945,9 +3070,10 @@ export class AppComponent {
         targets.push(id);
       }
     }
+    const pool = this.picIds();
     const out = [...targets];
-    while (out.length < targets.length + n) {
-      const r = 1 + Math.floor(Math.random() * 99);
+    while (out.length < targets.length + n && out.length < pool.length) {
+      const r = pool[Math.floor(Math.random() * pool.length)]!;
       if (!out.includes(r)) out.push(r);
     }
     return out;
@@ -2987,7 +3113,8 @@ export class AppComponent {
     }
     // Object task: also warm a small distractor band so test layouts are snappy.
     if (this.taskType() === this.TaskType.Picture) {
-      for (let i = 1; i <= Math.min(24, 99); i++) ids.add(i);
+      for (const id of this.picIds().slice(0, 24)) ids.add(id);
+      for (const id of this.customPicIds()) ids.add(id);
     } else {
       // Spatial uses a random filler pic per trial — warm common ids.
       for (let i = 1; i <= 12; i++) ids.add(i);
@@ -2999,7 +3126,7 @@ export class AppComponent {
           const img = new Image();
           img.onload = () => resolve();
           img.onerror = () => resolve();
-          img.src = `assets/pics/${this.pad3(id)}.jpg`;
+          img.src = this.picSrc(id);
         }),
     );
 
@@ -3043,22 +3170,107 @@ export class AppComponent {
     return x.toString().padStart(3, '0');
   }
 
+  /** Highest usable picture id (built-in or uploaded). */
+  maxPicId() {
+    const custom = this.customPicIds();
+    if (!custom.length) return MAX_PIC_ID;
+    return Math.max(MAX_PIC_ID, ...custom);
+  }
+
+  isCustomPic(id: number) {
+    return Number(id) >= CUSTOM_PIC_START;
+  }
+
+  /** Resolve built-in asset path or blob URL for an uploaded picture. */
+  picSrc(id: number) {
+    const n = Math.max(1, Math.floor(Number(id) || 1));
+    if (this.isCustomPic(n)) {
+      return this.customPicUrlById.get(n) || `assets/pics/${this.pad3(1)}.jpg`;
+    }
+    return `assets/pics/${this.pad3(n)}.jpg`;
+  }
+
+  private async _loadCustomPics() {
+    try {
+      const rows = await listCustomPicRecords();
+      for (const url of this.customPicUrlById.values()) URL.revokeObjectURL(url);
+      this.customPicUrlById.clear();
+      const ids: number[] = [];
+      for (const row of rows) {
+        ids.push(row.id);
+        this.customPicUrlById.set(row.id, URL.createObjectURL(row.blob));
+      }
+      this.customPicIds.set(ids);
+    } catch {
+      this.customPicIds.set([]);
+    }
+  }
+
+  async onCustomPicsSelected(ev: Event) {
+    const input = ev.target as HTMLInputElement;
+    const files = Array.from(input.files ?? []).filter((f) => f.type.startsWith('image/'));
+    input.value = '';
+    if (!files.length) return;
+    this.picUploadBusy.set(true);
+    try {
+      let nextId =
+        this.customPicIds().reduce((m, id) => Math.max(m, id), CUSTOM_PIC_START - 1) + 1;
+      const added: number[] = [];
+      for (const file of files) {
+        try {
+          const blob = await normalizeUploadImage(file);
+          const id = nextId++;
+          await putCustomPicRecord({ id, mime: 'image/jpeg', blob, addedAt: Date.now() });
+          this.customPicUrlById.set(id, URL.createObjectURL(blob));
+          added.push(id);
+        } catch {
+          /* skip bad file */
+        }
+      }
+      if (added.length) {
+        this.customPicIds.set([...this.customPicIds(), ...added].sort((a, b) => a - b));
+      }
+    } finally {
+      this.picUploadBusy.set(false);
+    }
+  }
+
+  async removeCustomPic(id: number, ev?: Event) {
+    ev?.stopPropagation();
+    ev?.preventDefault();
+    if (!this.isCustomPic(id)) return;
+    try {
+      await deleteCustomPicRecord(id);
+    } catch {
+      /* still drop from UI */
+    }
+    const url = this.customPicUrlById.get(id);
+    if (url) URL.revokeObjectURL(url);
+    this.customPicUrlById.delete(id);
+    this.customPicIds.set(this.customPicIds().filter((x) => x !== id));
+    // Remap any sequence steps that pointed at the removed picture.
+    const fallback = 1;
+    const remapped = this.pictureSequences().map((row) =>
+      row.map((pid) => (Number(pid) === Number(id) ? fallback : pid)),
+    );
+    this.pictureSequences.set(remapped);
+  }
+
   private _randPic(avoid: Set<number> = new Set()) {
-    // pics are 1..99
+    const pool = this.picIds();
     for (let i = 0; i < 40; i++) {
-      const r = 1 + Math.floor(Math.random() * 99);
+      const r = pool[Math.floor(Math.random() * pool.length)]!;
       if (!avoid.has(r)) return r;
     }
-    // fallback
-    for (let r = 1; r <= 99; r++) if (!avoid.has(r)) return r;
+    for (const r of pool) if (!avoid.has(r)) return r;
     return 1;
   }
 
   setPictureStep(trialIdx: number, stepIdx: number, value: string) {
-    const pic = Math.max(1, Math.min(99, Number(value) || 1));
+    const pic = Math.max(1, Math.min(this.maxPicId(), Number(value) || 1));
     const t = Math.max(1, this.trials());
     const steps = Math.max(1, this.stepsNum());
-    let next = this._normalizeSequences(this.pictureSequences(), t, steps, 1, 99, DEFAULT_PICTURE_ROWS).map(
+    let next = this._normalizeSequences(this.pictureSequences(), t, steps, 1, this.maxPicId(), DEFAULT_PICTURE_ROWS).map(
       (row) => [...row],
     );
     if (!next[trialIdx]) return;

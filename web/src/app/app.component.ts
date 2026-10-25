@@ -285,9 +285,9 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
                 />
                 <span class="test-mode-title">(B) Free recall</span>
                 <span class="test-mode-desc"
-                  >Every tap is recorded. For an N-item sequence the trial ends after N touches in any order
-                  (targets or distractors). Succeeds if those N taps are the target items (any order). Use
-                  (C) if the trial should keep going until the sequence is correct.</span
+                  >Every tap is recorded. Find all target items in any order — unlimited attempts (wrong taps do
+                  not end the trial). The trial ends only when every target has been touched. Use (C) to require
+                  the sequence in order.</span
                 >
               </label>
               <label class="test-mode-card" [class.selected]="testMode() === TestMode.AdvanceWhenCorrect">
@@ -1925,18 +1925,21 @@ export class AppComponent {
       return;
     }
 
-    // --- Free recall: N touches (any order) end the trial ---
-    // Both tasks. Distractors count as a response slot; repeats do not.
-    // Exception / contrast: Advance when correct keeps going until in-order success.
+    // --- Free recall: unlimited attempts until all targets found (any order) ---
+    // Both tasks. Wrong/distractor taps are logged + feedback, but do not end the trial.
+    // Contrast: Advance when correct requires the sequence in order.
     if (isFreeRecall) {
-      if (!ok) this.trialWrongCount++;
+      if (!ok) {
+        this.trialWrongCount++;
+        return;
+      }
       const next = [...presses, choiceId];
       this.pressed.set(next);
       this.pressedOrder.set([...this.pressedOrder(), { cell: choiceId, step: next.length }]);
-      if (ok && this.disappearOnCorrect()) {
+      if (this.disappearOnCorrect()) {
         this._hideCellAfterCorrect(tappedCell);
       }
-      if (next.length >= seq.length) {
+      if (this._isFreeRecallCorrect(next)) {
         this._completeTrial(next);
       }
       return;
@@ -2007,7 +2010,10 @@ export class AppComponent {
     return presses.length === seq.length && presses.every((value, index) => Number(value) === Number(seq[index]));
   }
 
-  /** Free recall success: same targets as the sequence, any order (no extras/distractors). */
+  /**
+   * Free recall complete/success: every sequence target has been found (any order).
+   * `presses` only stores newly found targets (wrong taps are not added).
+   */
   private _isFreeRecallCorrect(presses: number[]) {
     const seq = this.trialSequence().map(Number);
     if (presses.length !== seq.length) return false;

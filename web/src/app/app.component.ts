@@ -474,10 +474,11 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
           <div class="automatic-demo">
             <h2>Automatic demonstration</h2>
             <p class="muted small">
-              First <b>N</b> trials are ghost demos: the computer highlights each correct step in order (border +
-              sound). The teacher says “Watch!” — the child does not tap. Each of those N trials plays its own demo
-              (e.g. N=2 → two full watch trials). Teacher study / study timer are skipped on demo trials. Set
-              <b>Highlights per step</b> to flash each item more than once before advancing.
+              For each <b>unique sequence</b>, the first <b>N</b> trials of that sequence are ghost demos (constant N):
+              the computer highlights each correct step in order (border + sound). The teacher says “Watch!” — the
+              child does not tap. Example: N=2 with sequences A,A,A,B,B → two A demos, then live A; two B demos, then
+              live B. Teacher study / study timer are skipped on demo trials. Set <b>Highlights per step</b> to flash
+              each item more than once before advancing.
             </p>
             <div class="flag-grid">
               <label class="flag">
@@ -489,11 +490,11 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
                 <span>Automatic watch trials (ghost demos)</span>
               </label>
               <label>
-                <div class="lbl">Demo trials (first N)</div>
+                <div class="lbl">Demos per unique sequence (N)</div>
                 <input
                   type="number"
                   min="0"
-                  [max]="trials()"
+                  max="20"
                   [value]="demoTrials()"
                   [disabled]="!automaticDemo()"
                   (input)="demoTrials.set(+$any($event.target).value)"
@@ -1284,14 +1285,32 @@ export class AppComponent {
   private autoDemoStartTimer: number | null = null;
   /** Bumped to cancel stale ghost-demo timeouts when starting the next trial. */
   private autoDemoGeneration = 0;
-  /** Set after a non-demo teacher study has been shown for the current shared sequence. */
-  private liveStudyShownForSharedSequence = false;
+  /** Sequence keys that already had a non-demo teacher study this session. */
+  private liveStudyShownKeys = new Set<string>();
   /** Grid cells showing a short-lived border after a tap (clears after ~2s). */
   readonly borderFlashCells = signal<Set<number>>(new Set());
 
-  readonly isDemoTrial = computed(
-    () => this.automaticDemo() && this.trialIndex() < Math.max(0, Math.min(this.trials(), this.demoTrials())),
-  );
+  /**
+   * Ghost demo when automatic is on and this trial’s sequence has had fewer than
+   * `demoTrials` prior appearances (N is constant per unique sequence).
+   */
+  readonly isDemoTrial = computed(() => {
+    if (!this.automaticDemo()) return false;
+    const n = Math.max(0, Math.floor(this.demoTrials()));
+    if (n <= 0) return false;
+    // Touch sequence signals so the computed stays in sync with the editor.
+    void this.taskType();
+    void this.stepsNum();
+    void this.locationSequences();
+    void this.pictureSequences();
+    const t = this.trialIndex();
+    const key = this._sequenceKey(this._trialSequenceAt(t));
+    let earlierSame = 0;
+    for (let i = 0; i < t; i++) {
+      if (this._sequenceKey(this._trialSequenceAt(i)) === key) earlierSame++;
+    }
+    return earlierSame < n;
+  });
 
   /** Border on for user setting, or always during automatic watch playback (no sound there). */
   readonly showBorderHighlight = computed(() => this.feedbackBorder() || this.automaticPlayback());
@@ -1570,7 +1589,7 @@ export class AppComponent {
     this.trialTapCount = 0;
     this.trialWrongCount = 0;
     this.trialLocked = false;
-    this.liveStudyShownForSharedSequence = false;
+    this.liveStudyShownKeys = new Set();
     this._clearAdvanceTimer();
     this._stopAutoDemo();
     if (this.congratsTimer != null) {
@@ -1867,7 +1886,7 @@ export class AppComponent {
   private _startTeacherStudyForCurrentTrial() {
     this.sessionStudyDone.set(false);
     if (!this.isDemoTrial()) {
-      this.liveStudyShownForSharedSequence = true;
+      this._markLiveStudyShownForCurrentSequence();
     }
     // 0 = skip study entirely (both tasks, all modes) — no sequence flash.
     if (Math.max(0, this.studySeconds()) <= 0) {
@@ -1903,7 +1922,7 @@ export class AppComponent {
     if (this.phase() !== 'studyReady') return;
     this.sessionStudyDone.set(true);
     if (!this.isDemoTrial()) {
-      this.liveStudyShownForSharedSequence = true;
+      this._markLiveStudyShownForCurrentSequence();
     }
     this._enterTestPhase();
   }
@@ -2613,26 +2632,18 @@ export class AppComponent {
   }
 
   /**
-   * Skip teacher-led study for: demo trials, or live trials that already had a non-demo
-   * study for this shared/matching sequence. After automatic watch demos, the first live
-   * trial always gets study once (demos do not count as teacher study).
+   * Skip teacher-led study for: demo trials, or live trials whose sequence already had a
+   * non-demo study this session. After automatic watch demos, the first live trial of each
+   * unique sequence still gets study once (demos do not count as teacher study).
    */
   private _shouldSkipTeacherStudy() {
     if (this.isDemoTrial()) return true;
-    if (this.sameSequenceForAllTrials()) {
-      return this.liveStudyShownForSharedSequence;
-    }
-    if (this.trialIndex() <= 0) return false;
-    // Same sequence as previous live trial: skip only if a live study already happened.
-    if (this._sequenceMatchesPreviousTrial(this.trialIndex())) {
-      return this.liveStudyShownForSharedSequence || this._previousTrialWasLive();
-    }
-    return false;
+    const key = this._sequenceKey(this.trialSequence());
+    return this.liveStudyShownKeys.has(key);
   }
 
-  private _previousTrialWasLive() {
-    const prev = this.results().find((r) => r.trial === this.trialIndex());
-    return !!prev && !prev.isDemo;
+  private _markLiveStudyShownForCurrentSequence() {
+    this.liveStudyShownKeys.add(this._sequenceKey(this.trialSequence()));
   }
 
   private _touchElapsedMs() {

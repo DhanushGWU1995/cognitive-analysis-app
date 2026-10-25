@@ -2509,6 +2509,7 @@ export class AppComponent {
       this._playAutomaticStepSound();
 
       // Record one exportable press per sequence step (extra highlight flashes are UI-only).
+      // Also advance pressed/pressedOrder so Step# / smiley feedback mirrors a live trial.
       if (repeatIndex === 0) {
         this._appendTouch({
           press: this.trialTouches().length + 1,
@@ -2521,6 +2522,12 @@ export class AppComponent {
           ignored: false,
           automatic: true,
         });
+        const nextPressed = [...this.pressed(), item];
+        this.pressed.set(nextPressed);
+        this.pressedOrder.set([
+          ...this.pressedOrder(),
+          { cell: item, step: nextPressed.length },
+        ]);
       }
 
       repeatIndex++;

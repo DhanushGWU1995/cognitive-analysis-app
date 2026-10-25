@@ -924,8 +924,8 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
               </div>
             </div>
 
-            <div class="title" *ngIf="phase() === 'test' && automaticPlayback()">Watch!</div>
-            <div class="title" *ngIf="phase() === 'test' && !automaticPlayback()">
+            <div class="title" *ngIf="phase() === 'test' && isDemoTrial()">Watch!</div>
+            <div class="title" *ngIf="phase() === 'test' && !isDemoTrial()">
               {{
                 testMode() === TestMode.FreeRecall
                   ? (isSpatialTask() ? 'Touch each location!' : 'Touch each picture!')
@@ -934,13 +934,13 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
                     : 'Touch each picture in order!'
               }}
             </div>
-            <div class="subtitle" *ngIf="phase() === 'test' && automaticPlayback()">
+            <div class="subtitle" *ngIf="phase() === 'test' && isDemoTrial()">
               {{ isSpatialTask() ? 'Watch each location in order.' : 'Watch each picture in order.' }}
             </div>
-            <div class="subtitle" *ngIf="phase() === 'test' && !automaticPlayback() && testMode() !== TestMode.FreeRecall">
+            <div class="subtitle" *ngIf="phase() === 'test' && !isDemoTrial() && testMode() !== TestMode.FreeRecall">
               Step {{ pressed().length + 1 }} of {{ trialSequence().length }}
             </div>
-            <div class="subtitle" *ngIf="phase() === 'test' && !automaticPlayback() && testMode() === TestMode.FreeRecall">
+            <div class="subtitle" *ngIf="phase() === 'test' && !isDemoTrial() && testMode() === TestMode.FreeRecall">
               Response {{ pressed().length + 1 }} of {{ trialSequence().length }}
             </div>
             <div
@@ -1999,6 +1999,9 @@ export class AppComponent {
     if (this.isDemoTrial()) {
       // Always rebuild mapping right before scheduling so the next ghost demo is not empty.
       this._ensureDemoLayoutReady();
+      // Lock input + show “Watch!” for the whole demo trial (including the start pause).
+      this.automaticPlayback.set(true);
+      this.autoHighlightCell.set(null);
       if (this.autoDemoStartTimer != null) window.clearTimeout(this.autoDemoStartTimer);
       // Brief pause so “Watch!” is readable before the first highlight.
       this.autoDemoStartTimer = window.setTimeout(() => {
@@ -2066,7 +2069,7 @@ export class AppComponent {
   }
 
   onPick(choice: number, tappedCell: number) {
-    if (this.phase() !== 'test' || this.automaticPlayback() || this.trialLocked) return;
+    if (this.phase() !== 'test' || this.automaticPlayback() || this.isDemoTrial() || this.trialLocked) return;
     this._handleTestTap(Number(choice), tappedCell);
   }
 
@@ -2464,7 +2467,7 @@ export class AppComponent {
         window.clearTimeout(this.autoDemoTimer);
         this.autoDemoTimer = null;
       }
-      this.automaticPlayback.set(false);
+      // Keep “Watch!” / input lock until the trial advances.
       this.autoHighlightCell.set(null);
       const presses = [...seq];
       this.pressed.set(presses);
@@ -3025,7 +3028,7 @@ export class AppComponent {
 
   isGridCellDisabled(cell: number) {
     if (this.phase() !== 'test') return true;
-    if (this.automaticPlayback() || this.trialLocked) return true;
+    if (this.automaticPlayback() || this.isDemoTrial() || this.trialLocked) return true;
     if (this.disappearedCells().has(cell)) return true;
     if (this.taskType() === this.TaskType.Location) {
       return !this.trialTestCells().includes(cell);

@@ -142,6 +142,15 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
         <div class="topbar-right">
           <div class="topbar-actions" *ngIf="screen() === 'run' || screen() === 'results'">
             <div class="chip" *ngIf="screen() === 'run'">Trial {{ trialIndex() + 1 }} / {{ trials() }}</div>
+            <button
+              type="button"
+              class="btn ghost topbar-btn early-finish-btn"
+              *ngIf="screen() === 'run'"
+              title="Stop testing and save data collected so far"
+              (click)="finishEarly()"
+            >
+              Early Finish
+            </button>
             <button type="button" class="btn ghost topbar-btn" (click)="returnToSetup()">Edit setup</button>
           </div>
           <button
@@ -835,13 +844,18 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
         </section>
 
         <section class="card" *ngIf="screen() === 'results'">
-          <h1>All finished!</h1>
-          <p class="muted">Download a SELeCT-compatible Excel report (one row per press).</p>
+          <h1>{{ sessionEndedEarly() ? 'Session ended early' : 'All finished!' }}</h1>
+          <p class="muted">
+            Download a SELeCT-compatible Excel report (one row per press).
+            <span *ngIf="sessionEndedEarly()"> Data from trials completed (and any in-progress trial) was saved.</span>
+          </p>
           <div class="actions">
             <button class="btn ghost" (click)="screen.set('home')">New session</button>
-            <button class="btn primary" (click)="downloadReport()">Download Report</button>
+            <button class="btn primary" [disabled]="results().length === 0" (click)="downloadReport()">
+              Download Report
+            </button>
           </div>
-          <div class="mini">Completed: {{ results().length }} / {{ trials() }} trial(s)</div>
+          <div class="mini">Saved: {{ results().length }} / {{ trials() }} trial(s)</div>
         </section>
       </main>
 
@@ -1007,6 +1021,8 @@ export class AppComponent {
     this.VideoRewardStyle.Kids,
   );
   readonly rewardSeconds = signal(3);
+  /** True when the teacher stopped the session with Early Finish (results still downloadable). */
+  readonly sessionEndedEarly = signal(false);
   readonly activeRewardKind = signal<'correct' | 'video' | 'surprise' | null>(null);
   readonly activeRewardVideo = signal<RewardVideoClip | null>(null);
   /** Bumps each reward so the <video> element is destroyed/recreated (src changes alone often do not reload). */
@@ -1236,10 +1252,59 @@ export class AppComponent {
     this._stopAutoDemo();
     this._stopAllAudio();
     this._resetSessionProgress();
+    this.sessionEndedEarly.set(false);
     this.screen.set('setup');
   }
 
+  /**
+   * Stop testing early (Spatial + Object, all modes).
+   * Keeps every completed trial already in results, plus the current trial if any taps were recorded.
+   * Goes to the results screen so the report can be downloaded.
+   */
+  finishEarly() {
+    if (this.screen() !== 'run') return;
+
+    this._stopTimer();
+    this._stopAutoDemo();
+    this._stopAllAudio();
+    this._clearAdvanceTimer();
+    if (this.congratsTimer != null) {
+      window.clearTimeout(this.congratsTimer);
+      this.congratsTimer = null;
+    }
+    this.showCongrats.set(false);
+    this.activeRewardKind.set(null);
+    this.activeSurprise.set(null);
+    this.activeRewardVideo.set(null);
+    this.feedback.set(null);
+    this.automaticPlayback.set(false);
+    this.autoHighlightCell.set(null);
+    this.sequenceChangedPromptOpen.set(false);
+    this._clearBorderFlashes();
+
+    // Persist in-progress trial taps so nothing collected mid-trial is lost.
+    const trialNum = this.trialIndex() + 1;
+    const alreadyRecorded = this.results().some((r) => r.trial === trialNum);
+    const hasCollected =
+      this.trialTouches().length > 0 || this.pressed().length > 0;
+    if (!alreadyRecorded && hasCollected && this.phase() !== 'done') {
+      const ms = Math.max(0, Math.round(performance.now() - this.trialStartedAt));
+      const presses = this.pressed();
+      const correct =
+        this.testMode() === this.TestMode.FreeRecall
+          ? this._isFreeRecallCorrect(presses)
+          : this._isSequenceComplete(presses);
+      this._recordTrialResult(presses, correct, ms, this.isDemoTrial());
+    }
+
+    this.trialLocked = true;
+    this.sessionEndedEarly.set(true);
+    this.phase.set('done');
+    this.screen.set('results');
+  }
+
   private _resetSessionProgress() {
+    this.sessionEndedEarly.set(false);
     this.results.set([]);
     this.trialIndex.set(0);
     this.stepIndex.set(0);
@@ -2233,6 +2298,7 @@ export class AppComponent {
     const t = this.trialIndex() + 1;
     if (t >= this.trials()) {
       this._stopAllAudio();
+      this.sessionEndedEarly.set(false);
       this.phase.set('done');
       this.screen.set('results');
       return;

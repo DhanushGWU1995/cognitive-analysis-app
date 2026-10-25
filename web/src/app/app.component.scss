@@ -80,6 +80,17 @@
   font-size: 13px;
 }
 
+.early-finish-btn {
+  border-color: rgba(180, 83, 9, 0.35);
+  background: rgba(255, 237, 213, 0.95);
+  color: #9a3412;
+  font-weight: 800;
+}
+
+.early-finish-btn:hover {
+  background: #fed7aa;
+}
+
 .desktop-exit-btn {
   height: 34px;
   min-width: 64px;

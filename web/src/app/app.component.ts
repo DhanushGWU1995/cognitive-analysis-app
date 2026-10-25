@@ -374,19 +374,19 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
           <div class="automatic-demo">
             <h2>Automatic demonstration</h2>
             <p class="muted small">
-              On demo trials the computer highlights each correct step in order (border and sound always on). The
-              teacher says “Watch!” — the child does not tap. Teacher study is skipped and the study timer is not
-              used on automatic trials. Set <b>Highlights per step</b> to repeat each sequence item before advancing
-              (e.g. 3 flashes on location 1, then location 4).
+              First <b>N</b> trials are ghost demos: the computer highlights each correct step in order (border +
+              sound). The teacher says “Watch!” — the child does not tap. Each of those N trials plays its own demo
+              (e.g. N=2 → two full watch trials). Teacher study / study timer are skipped on demo trials. Set
+              <b>Highlights per step</b> to flash each item more than once before advancing.
             </p>
             <div class="flag-grid">
               <label class="flag">
                 <input
                   type="checkbox"
                   [checked]="automaticDemo()"
-                  (change)="automaticDemo.set($any($event.target).checked)"
+                  (change)="setAutomaticDemo($any($event.target).checked)"
                 />
-                <span>Automatic watch trials</span>
+                <span>Automatic watch trials (ghost demos)</span>
               </label>
               <label>
                 <div class="lbl">Demo trials (first N)</div>
@@ -1137,6 +1137,8 @@ export class AppComponent {
   private borderFlashTimers = new Map<number, number>();
   private autoDemoTimer: number | null = null;
   private autoDemoStartTimer: number | null = null;
+  /** Bumped to cancel stale ghost-demo timeouts when starting the next trial. */
+  private autoDemoGeneration = 0;
   /** Set after a non-demo teacher study has been shown for the current shared sequence. */
   private liveStudyShownForSharedSequence = false;
   /** Grid cells showing a short-lived border after a tap (clears after ~2s). */
@@ -1240,6 +1242,14 @@ export class AppComponent {
       const t = Math.max(1, this.trials());
       untracked(() => this.totalTrialsNum.set(t));
     });
+  }
+
+  setAutomaticDemo(on: boolean) {
+    this.automaticDemo.set(on);
+    // Enabling ghost demos with N=0 would never run; default to at least one watch trial.
+    if (on && this.demoTrials() < 1) {
+      this.demoTrials.set(1);
+    }
   }
 
   setTestMode(mode: (typeof this.TestMode)[keyof typeof this.TestMode]) {
@@ -1802,6 +1812,8 @@ export class AppComponent {
     this._clearBorderFlashes();
     this._stopTimer();
     if (this.isDemoTrial()) {
+      // Always rebuild mapping right before scheduling so the next ghost demo is not empty.
+      this._ensureDemoLayoutReady();
       if (this.autoDemoStartTimer != null) window.clearTimeout(this.autoDemoStartTimer);
       this.autoDemoStartTimer = window.setTimeout(() => {
         this.autoDemoStartTimer = null;
@@ -2029,6 +2041,7 @@ export class AppComponent {
 
     // Watch demos: advance quietly without the live-trial reward.
     if (isDemo) {
+      this._stopAutoDemo();
       this._scheduleAdvance(500);
       return;
     }
@@ -2221,7 +2234,22 @@ export class AppComponent {
   private _runAutomaticDemo() {
     if (this.phase() !== 'test' || !this.isDemoTrial() || this.trialLocked) return;
 
+    // Cancel any leftover timers from a previous ghost demo (fixes missing 2nd+ demo).
+    if (this.autoDemoTimer != null) {
+      window.clearTimeout(this.autoDemoTimer);
+      this.autoDemoTimer = null;
+    }
+    const gen = ++this.autoDemoGeneration;
+
+    // Ensure every sequence item has a visible cell before highlighting (Spatial + Object).
+    this._ensureDemoLayoutReady();
+
     const seq = this.trialSequence().map((id) => Number(id));
+    if (!seq.length) {
+      this._completeTrial([]);
+      return;
+    }
+
     const highlightsPerStep = Math.max(1, Math.min(16, this.demoHighlightsPerStep()));
     this.automaticPlayback.set(true);
     this.autoHighlightCell.set(null);
@@ -2233,10 +2261,16 @@ export class AppComponent {
 
     let step = 0;
     let repeatIndex = 0;
+    let layoutRetries = 0;
     // Automatic watch never uses the study timer — fixed short highlight for both tasks.
     const stepMs = 800;
 
     const finishDemo = () => {
+      if (gen !== this.autoDemoGeneration) return;
+      if (this.autoDemoTimer != null) {
+        window.clearTimeout(this.autoDemoTimer);
+        this.autoDemoTimer = null;
+      }
       this.automaticPlayback.set(false);
       this.autoHighlightCell.set(null);
       const presses = [...seq];
@@ -2246,16 +2280,23 @@ export class AppComponent {
     };
 
     const playHighlight = () => {
-      if (this.trialLocked || this.phase() !== 'test') return;
+      if (gen !== this.autoDemoGeneration) return;
+      if (this.trialLocked || this.phase() !== 'test' || !this.isDemoTrial()) return;
 
       if (step >= seq.length) {
         finishDemo();
         return;
       }
 
-      const item = seq[step];
-      const cell = this._gridCellForItem(item);
+      const item = seq[step]!;
+      let cell = this._gridCellForItem(item);
+      if (cell == null && layoutRetries < 2) {
+        layoutRetries++;
+        this._ensureDemoLayoutReady();
+        cell = this._gridCellForItem(item);
+      }
       if (cell == null) {
+        // Still missing — skip this step rather than hanging the session.
         step++;
         repeatIndex = 0;
         playHighlight();
@@ -2285,8 +2326,10 @@ export class AppComponent {
       const doneWithStep = repeatIndex >= highlightsPerStep;
 
       this.autoDemoTimer = window.setTimeout(() => {
+        if (gen !== this.autoDemoGeneration) return;
         this.autoHighlightCell.set(null);
         this.autoDemoTimer = window.setTimeout(() => {
+          if (gen !== this.autoDemoGeneration) return;
           if (doneWithStep) {
             step++;
             repeatIndex = 0;
@@ -2299,18 +2342,31 @@ export class AppComponent {
     playHighlight();
   }
 
+  /** Rebuild test grid mapping so ghost highlights always have a cell to flash. */
+  private _ensureDemoLayoutReady() {
+    if (this.taskType() === this.TaskType.Location) {
+      const cells = this._buildLocationTestCells();
+      this.trialTestCells.set(cells);
+      if (!this.locTrialPicId()) this._buildLocTrialPic();
+    } else {
+      this._buildPicTestLayout();
+    }
+  }
+
   private _gridCellForItem(item: number): number | null {
     if (this.taskType() === this.TaskType.Location) {
-      return this.trialTestCells().includes(item) ? item : null;
+      const cells = this.trialTestCells();
+      return cells.map(Number).includes(Number(item)) ? Number(item) : null;
     }
     const map = this.picTestCellToPic();
     for (const [cellKey, picId] of Object.entries(map)) {
-      if (Number(picId) === item) return Number(cellKey);
+      if (Number(picId) === Number(item)) return Number(cellKey);
     }
     return null;
   }
 
   private _stopAutoDemo() {
+    this.autoDemoGeneration++;
     if (this.autoDemoTimer != null) {
       window.clearTimeout(this.autoDemoTimer);
       this.autoDemoTimer = null;

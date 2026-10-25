@@ -360,37 +360,44 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
             <p class="muted small">Applies to Spatial and Object tasks. Pick a preset, then fine-tune below if needed.</p>
             <div class="test-mode-options">
               <label class="test-mode-card" [class.selected]="testMode() === TestMode.Standard">
-                <input
-                  type="radio"
-                  name="testMode"
-                  [checked]="testMode() === TestMode.Standard"
-                  (change)="setTestMode(TestMode.Standard)"
-                />
-                <span class="test-mode-title">(A) Standard test</span>
-                <span class="test-mode-desc">Border + correct sound on right taps. Wrong sound, grid clears, next trial on error.</span>
+                <span class="test-mode-head">
+                  <input
+                    type="radio"
+                    name="testMode"
+                    [checked]="testMode() === TestMode.Standard"
+                    (change)="setTestMode(TestMode.Standard)"
+                  />
+                  <span class="test-mode-title">(A) Standard test</span>
+                </span>
+                <span class="test-mode-desc"
+                  >Border + correct sound on right taps. Wrong sound, grid clears, next trial on error.</span
+                >
               </label>
               <label class="test-mode-card" [class.selected]="testMode() === TestMode.FreeRecall">
-                <input
-                  type="radio"
-                  name="testMode"
-                  [checked]="testMode() === TestMode.FreeRecall"
-                  (change)="setTestMode(TestMode.FreeRecall)"
-                />
-                <span class="test-mode-title">(B) Free recall</span>
+                <span class="test-mode-head">
+                  <input
+                    type="radio"
+                    name="testMode"
+                    [checked]="testMode() === TestMode.FreeRecall"
+                    (change)="setTestMode(TestMode.FreeRecall)"
+                  />
+                  <span class="test-mode-title">(B) Free recall</span>
+                </span>
                 <span class="test-mode-desc"
-                  >Every tap is recorded. Find all target items in any order — unlimited attempts (wrong taps do
-                  not end the trial). The trial ends only when every target has been touched. Use (C) to require
-                  the sequence in order.</span
+                  >Find all targets in any order — unlimited attempts. Trial ends only when every target is
+                  touched. Use (C) for ordered sequence.</span
                 >
               </label>
               <label class="test-mode-card" [class.selected]="testMode() === TestMode.AdvanceWhenCorrect">
-                <input
-                  type="radio"
-                  name="testMode"
-                  [checked]="testMode() === TestMode.AdvanceWhenCorrect"
-                  (change)="setTestMode(TestMode.AdvanceWhenCorrect)"
-                />
-                <span class="test-mode-title">(C) Advance when correct</span>
+                <span class="test-mode-head">
+                  <input
+                    type="radio"
+                    name="testMode"
+                    [checked]="testMode() === TestMode.AdvanceWhenCorrect"
+                    (change)="setTestMode(TestMode.AdvanceWhenCorrect)"
+                  />
+                  <span class="test-mode-title">(C) Advance when correct</span>
+                </span>
                 <span class="test-mode-desc">Wrong sound on errors. Trial continues until the sequence is correct.</span>
               </label>
             </div>

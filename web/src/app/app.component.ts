@@ -511,36 +511,42 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
             <p class="muted small">
               Shown after a correct trial (Spatial and Object, all test modes). Automatic watch demos stay quiet.
             </p>
-            <div class="test-mode-options">
-              <label class="test-mode-card" [class.selected]="rewardMode() === RewardMode.None">
-                <input
-                  type="radio"
-                  name="rewardMode"
-                  [checked]="rewardMode() === RewardMode.None"
-                  (change)="rewardMode.set(RewardMode.None)"
-                />
-                <span class="test-mode-title">No reward</span>
-                <span class="test-mode-desc">Advance to the next trial with no celebration screen.</span>
+            <div class="reward-mode-options">
+              <label class="reward-mode-card" [class.selected]="rewardMode() === RewardMode.None">
+                <span class="reward-mode-head">
+                  <input
+                    type="radio"
+                    name="rewardMode"
+                    [checked]="rewardMode() === RewardMode.None"
+                    (change)="rewardMode.set(RewardMode.None)"
+                  />
+                  <span class="reward-mode-title">No reward</span>
+                </span>
+                <span class="reward-mode-desc">Skip celebration; go to the next trial.</span>
               </label>
-              <label class="test-mode-card" [class.selected]="rewardMode() === RewardMode.Correct">
-                <input
-                  type="radio"
-                  name="rewardMode"
-                  [checked]="rewardMode() === RewardMode.Correct"
-                  (change)="rewardMode.set(RewardMode.Correct)"
-                />
-                <span class="test-mode-title">Audio / visual: Correct</span>
-                <span class="test-mode-desc">Short “Correct!” card with sound. No video.</span>
+              <label class="reward-mode-card" [class.selected]="rewardMode() === RewardMode.Correct">
+                <span class="reward-mode-head">
+                  <input
+                    type="radio"
+                    name="rewardMode"
+                    [checked]="rewardMode() === RewardMode.Correct"
+                    (change)="rewardMode.set(RewardMode.Correct)"
+                  />
+                  <span class="reward-mode-title">Correct</span>
+                </span>
+                <span class="reward-mode-desc">Short “Correct!” card with sound. No video.</span>
               </label>
-              <label class="test-mode-card" [class.selected]="rewardMode() === RewardMode.Video">
-                <input
-                  type="radio"
-                  name="rewardMode"
-                  [checked]="rewardMode() === RewardMode.Video"
-                  (change)="rewardMode.set(RewardMode.Video)"
-                />
-                <span class="test-mode-title">Video reward</span>
-                <span class="test-mode-desc">Cute kids celebration clips with congratulatory cheer music.</span>
+              <label class="reward-mode-card" [class.selected]="rewardMode() === RewardMode.Video">
+                <span class="reward-mode-head">
+                  <input
+                    type="radio"
+                    name="rewardMode"
+                    [checked]="rewardMode() === RewardMode.Video"
+                    (change)="rewardMode.set(RewardMode.Video)"
+                  />
+                  <span class="reward-mode-title">Video reward</span>
+                </span>
+                <span class="reward-mode-desc">Dancer clips with cheer music.</span>
               </label>
             </div>
             <div class="form reward-form" *ngIf="rewardMode() !== RewardMode.None">
@@ -558,17 +564,25 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
                 <div class="lbl">Video reward type</div>
                 <select
                   class="reward-select"
-                  [value]="videoRewardStyle()"
                   (change)="videoRewardStyle.set($any($event.target).value)"
                 >
-                  <option [value]="VideoRewardStyle.Kids">Kids celebration</option>
-                  <option [value]="VideoRewardStyle.Surprise">Surprise (random short clips)</option>
+                  <option
+                    value="kids"
+                    [attr.selected]="videoRewardStyle() === VideoRewardStyle.Kids ? '' : null"
+                  >
+                    Dancer celebration
+                  </option>
+                  <option
+                    value="surprise"
+                    [attr.selected]="videoRewardStyle() === VideoRewardStyle.Surprise ? '' : null"
+                  >
+                    Surprise (random short clips)
+                  </option>
                 </select>
               </label>
             </div>
             <p class="muted small" *ngIf="rewardMode() === RewardMode.Video">
-              Short clips of kids clapping, laughing, and celebrating — plus cheer music when they finish.
-              Surprise picks a different clip each trial (≤ 5s).
+              Short dancer celebration clips plus cheer music. Surprise picks a different clip each trial (≤ 5s).
             </p>
           </div>
 

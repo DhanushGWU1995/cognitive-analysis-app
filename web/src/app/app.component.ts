@@ -1038,11 +1038,22 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
             <span *ngIf="reportAutoDownloaded()"> An Excel download was started automatically.</span>
           </p>
           <div class="actions">
-            <button class="btn ghost" (click)="goHomeFromResults()">New session</button>
+            <button
+              class="btn ghost"
+              type="button"
+              title="Keep the same setup and sequences; clear Subject ID for the next child"
+              (click)="newSessionFromResults()"
+            >
+              New session
+            </button>
             <button class="btn primary" [disabled]="results().length === 0" (click)="downloadReport()">
               Download Report
             </button>
           </div>
+          <p class="muted small" style="margin-top: 8px">
+            <b>New session</b> reuses this run’s programming (sequences, modes, rewards) and opens setup with a blank
+            Subject ID. Use <b>Back</b> on setup if you need to switch Spatial / Object.
+          </p>
           <div class="mini">
             Saved: {{ results().length }} / {{ trials() }} trial(s)
             <span *ngIf="lastCheckpointAt()"> · backup {{ lastCheckpointLabel() }}</span>
@@ -1519,6 +1530,35 @@ export class AppComponent {
   goHomeFromResults() {
     this._refreshPendingRecovery();
     this.screen.set('home');
+  }
+
+  /**
+   * Start another child with the same programming.
+   * Keeps task type, sequences, trials, modes, rewards, automatic settings, etc.
+   * Clears Subject ID and run results so Start requires a new ID.
+   */
+  newSessionFromResults() {
+    this._stopTimer();
+    this._stopAutoDemo();
+    this._stopAllAudio();
+    this._clearAdvanceTimer();
+    this.showCongrats.set(false);
+    this.activeRewardKind.set(null);
+    this.activeSurprise.set(null);
+    this.activeRewardVideo.set(null);
+    this.feedback.set(null);
+    this.sequenceChangedPromptOpen.set(false);
+    this.sameSequencePromptOpen.set(false);
+    this.sequenceValidationPromptOpen.set(false);
+    this.sequenceValidationErrors.set([]);
+    this._clearBorderFlashes();
+
+    // Blank ID avoids reusing the previous child’s ID by mistake (Start requires ≥ 2 chars).
+    this.subjectId.set('');
+    this._resetSessionProgress();
+    this.sessionEndedEarly.set(false);
+    this._refreshPendingRecovery();
+    this.screen.set('setup');
   }
 
   goSetup(type: 'location' | 'picture') {

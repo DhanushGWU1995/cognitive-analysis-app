@@ -344,12 +344,16 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
               <input type="number" min="0" max="12" [value]="distractorsN()" (input)="distractorsN.set(+$any($event.target).value)" />
             </label>
             <label>
-              <div class="lbl">Study timer (seconds per item; 0 = skip study, no flash)</div>
+              <div class="lbl">
+                Study timer (seconds per item; 0 = skip study, no flash)
+                <span *ngIf="automaticDemo()" class="muted"> — off while Automatic watch is on</span>
+              </div>
               <input
                 type="number"
                 min="0"
                 max="10"
-                [value]="studySeconds()"
+                [value]="automaticDemo() ? 0 : studySeconds()"
+                [disabled]="automaticDemo()"
                 (input)="studySeconds.set(+$any($event.target).value)"
               />
             </label>
@@ -477,7 +481,8 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
               For each <b>unique sequence</b>, the first <b>N</b> trials of that sequence are ghost demos (constant N):
               the computer highlights each correct step in order (border + sound). The teacher says “Watch!” — the
               child does not tap. Example: N=2 with sequences A,A,A,B,B → two A demos, then live A; two B demos, then
-              live B. Teacher study / study timer are skipped on demo trials. Use <b>Seconds per demo step</b> to slow
+              live B. While Automatic watch is on, the <b>Study timer is disabled</b> for the whole session (demos
+              replace study — otherwise kids see two sequence playbacks). Use <b>Seconds per demo step</b> to slow
               the watch pace; set <b>Highlights per step</b> to flash each item more than once before advancing.
             </p>
             <div class="flag-grid">
@@ -1428,6 +1433,10 @@ export class AppComponent {
     // Enabling ghost demos with N=0 would never run; default to at least one watch trial.
     if (on && this.demoTrials() < 1) {
       this.demoTrials.set(1);
+    }
+    // Ghost watch replaces teacher study — keep study timer off so kids do not get two demos.
+    if (on) {
+      this.studySeconds.set(0);
     }
   }
 
@@ -2669,12 +2678,12 @@ export class AppComponent {
   }
 
   /**
-   * Skip teacher-led study for: demo trials, or live trials whose sequence already had a
-   * non-demo study this session. After automatic watch demos, the first live trial of each
-   * unique sequence still gets study once (demos do not count as teacher study).
+   * Skip teacher-led study for: any trial while Automatic watch is on (ghost demos replace
+   * study — otherwise kids get two sequence playbacks), or live trials whose sequence
+   * already had a non-demo study this session.
    */
   private _shouldSkipTeacherStudy() {
-    if (this.isDemoTrial()) return true;
+    if (this.automaticDemo() || this.isDemoTrial()) return true;
     const key = this._sequenceKey(this.trialSequence());
     return this.liveStudyShownKeys.has(key);
   }

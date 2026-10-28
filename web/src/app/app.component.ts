@@ -359,6 +359,26 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
             </label>
           </div>
 
+          <div class="condition-presets">
+            <h2>Condition presets</h2>
+            <p class="muted small">
+              One-tap lab conditions (study timer, test mode, surprise video reward, automatic watch). Sequences and
+              trial counts stay as programmed — fine-tune anything below after picking a preset.
+            </p>
+            <div class="condition-preset-row">
+              <button
+                type="button"
+                class="condition-preset-btn"
+                *ngFor="let preset of conditionPresets"
+                [class.selected]="activeConditionPreset() === preset.id"
+                (click)="applyConditionPreset(preset.id)"
+              >
+                <span class="condition-preset-title">{{ preset.label }}</span>
+                <span class="condition-preset-desc">{{ preset.blurb }}</span>
+              </button>
+            </div>
+          </div>
+
           <div class="test-mode-picker">
             <h2>Test mode</h2>
             <p class="muted small">Applies to Spatial and Object tasks. Pick a preset, then fine-tune below if needed.</p>
@@ -1184,8 +1204,47 @@ export class AppComponent {
     Surprise: 'surprise',
   } as const;
 
+  readonly ConditionPreset = {
+    Imitation: 'imitation',
+    Emulation: 'emulation',
+    Overimitation: 'overimitation',
+    Recall: 'recall',
+    Ghost: 'ghost',
+  } as const;
+
+  readonly conditionPresets = [
+    {
+      id: this.ConditionPreset.Imitation,
+      label: 'Imitation',
+      blurb: 'Study 1 · Standard · Surprise · Auto off',
+    },
+    {
+      id: this.ConditionPreset.Emulation,
+      label: 'Emulation',
+      blurb: 'Study 1 · Standard · Surprise · Auto off',
+    },
+    {
+      id: this.ConditionPreset.Overimitation,
+      label: 'Overimitation',
+      blurb: 'Study 1 · Free recall · Surprise · Auto off',
+    },
+    {
+      id: this.ConditionPreset.Recall,
+      label: 'Recall',
+      blurb: 'Study 0 · Standard · Surprise · Auto off',
+    },
+    {
+      id: this.ConditionPreset.Ghost,
+      label: 'Ghost',
+      blurb: 'Study 0 · Standard · Surprise · Auto on · 1s/step',
+    },
+  ] as const;
+
   readonly screen = signal<'home' | 'setup' | 'run' | 'results'>('home');
   readonly taskType = signal<(typeof this.TaskType)[keyof typeof this.TaskType]>(this.TaskType.Location);
+  readonly activeConditionPreset = signal<(typeof this.ConditionPreset)[keyof typeof this.ConditionPreset] | null>(
+    null,
+  );
 
   // Session setup
   readonly subjectId = signal('kid001');
@@ -1455,6 +1514,40 @@ export class AppComponent {
     const n = Number.isFinite(raw) ? raw : 2;
     // Keep watch pace readable for toddlers (1–5s per highlighted item).
     this.demoStepSeconds.set(Math.max(1, Math.min(5, Math.round(n * 2) / 2)));
+  }
+
+  /**
+   * Lab condition shortcuts. Does not change Subject ID, trials, steps, or sequences.
+   */
+  applyConditionPreset(id: (typeof this.ConditionPreset)[keyof typeof this.ConditionPreset]) {
+    this.activeConditionPreset.set(id);
+    this.rewardMode.set(this.RewardMode.Video);
+    this.videoRewardStyle.set(this.VideoRewardStyle.Surprise);
+
+    switch (id) {
+      case this.ConditionPreset.Imitation:
+      case this.ConditionPreset.Emulation:
+        this.setAutomaticDemo(false);
+        this.setTestMode(this.TestMode.Standard);
+        this.studySeconds.set(1);
+        break;
+      case this.ConditionPreset.Overimitation:
+        this.setAutomaticDemo(false);
+        this.setTestMode(this.TestMode.FreeRecall);
+        this.studySeconds.set(1);
+        break;
+      case this.ConditionPreset.Recall:
+        this.setAutomaticDemo(false);
+        this.setTestMode(this.TestMode.Standard);
+        this.studySeconds.set(0);
+        break;
+      case this.ConditionPreset.Ghost:
+        this.setTestMode(this.TestMode.Standard);
+        this.setAutomaticDemo(true);
+        this.setDemoStepSeconds(1);
+        this.studySeconds.set(0);
+        break;
+    }
   }
 
   setTestMode(mode: (typeof this.TestMode)[keyof typeof this.TestMode]) {

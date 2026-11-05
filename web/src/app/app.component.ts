@@ -1554,6 +1554,7 @@ export class AppComponent {
         this._stopAllAudio();
         this.picPickerOpen.set(false);
         this.locPickerOpen.set(false);
+        this.picPickerMode.set('sequence');
       }
     });
 
@@ -2253,8 +2254,34 @@ export class AppComponent {
   seedSpatialLayoutPair() {
     // Default 1×2 in the middle row (cells 7–8), same picture in both — classic Spatial Level-1 style.
     const pic = this._randPic();
-    this.spatialLayoutCells.set([7, 8]);
+    const cells = [7, 8];
+    this.spatialLayoutCells.set(cells);
     this.spatialLayoutPics.set({ 7: pic, 8: pic });
+    this._alignSpatialSequencesToLayout(cells);
+  }
+
+  /**
+   * When the fixed layout can cover StepsNum uniquely, rewrite Spatial sequences onto those cells
+   * so enabling 1×2 does not immediately fail Start against leftover default cells (e.g. 13, 6).
+   */
+  private _alignSpatialSequencesToLayout(cells: number[]) {
+    const steps = Math.max(1, this.stepsNum());
+    if (!cells.length || steps > cells.length) return;
+    const assigned = cells.slice(0, steps);
+    const t = Math.max(1, this.trials());
+    let next = this._normalizeSequences(
+      this.locationSequences(),
+      t,
+      steps,
+      1,
+      16,
+      DEFAULT_LOCATION_ROWS,
+    ).map(() => [...assigned]);
+    if (this.sameSequenceForAllTrials()) next = this._syncAllTrialsToMaster(next);
+    this.locationSequences.set(next);
+    // Avoid the “same sequence for all trials?” prompt after an intentional layout seed.
+    this.sameSequencePromptOpen.set(false);
+    this.pendingStartAfterSameSequencePrompt = false;
   }
 
   clearSpatialLayout() {
@@ -3381,13 +3408,16 @@ export class AppComponent {
   }
 
   isGridCellDim(cell: number) {
-    if (this.disappearedCells().has(cell)) return true;
+    // Fixed Spatial layout: keep unused cells dimmed in study + test (display subset of the 4×4).
     if (this.taskType() === this.TaskType.Location && this.spatialFixedLayout()) {
       if (this.phase() === 'study' || this.phase() === 'test') {
+        if (this.phase() === 'test' && this.disappearedCells().has(cell)) return true;
         return !this.spatialLayoutCells().includes(cell);
       }
     }
+    // Default path (unchanged): dimming only applies during test.
     if (this.phase() !== 'test') return false;
+    if (this.disappearedCells().has(cell)) return true;
     if (this.taskType() === this.TaskType.Location) {
       return !this.trialTestCells().includes(cell);
     }

@@ -650,9 +650,20 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
                 <p class="muted small">
                   Pick a picture for each step (Object Task). StepsNum controls how many picks per trial. Use
                   <b>Copy previous</b> on a row to match the trial above it.
+                  <span *ngIf="objectManualLocations()">
+                    With manual locations on, also pick the grid cell for each picture (like Spatial).
+                  </span>
                 </p>
               </div>
               <div class="seq-tools">
+                <label class="seq-toggle">
+                  <input
+                    type="checkbox"
+                    [checked]="objectManualLocations()"
+                    (change)="setObjectManualLocations($any($event.target).checked)"
+                  />
+                  <span>Manual locations</span>
+                </label>
                 <label class="seq-toggle">
                   <input
                     type="checkbox"
@@ -687,15 +698,26 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
                   <div class="seq-row">
                     <div class="cell trial trial-col synced">★</div>
                     <div class="cell step-col" *ngFor="let __ of [].constructor(stepsNum()); let si = index">
-                      <button class="pick pick-visual" type="button" (click)="openPicPicker(0, si)">
-                        <img
-                          class="pick-thumb"
-                          [src]="picSrc(pictureSequences()[0][si])"
-                          alt=""
-                          loading="lazy"
-                        />
-                        <span class="pick-label">{{ pad3(pictureSequences()[0][si]) }}</span>
-                      </button>
+                      <div class="step-pair">
+                        <button class="pick pick-visual" type="button" (click)="openPicPicker(0, si)">
+                          <img
+                            class="pick-thumb"
+                            [src]="picSrc(pictureSequences()[0][si])"
+                            alt=""
+                            loading="lazy"
+                          />
+                          <span class="pick-label">{{ pad3(pictureSequences()[0][si]) }}</span>
+                        </button>
+                        <button
+                          *ngIf="objectManualLocations()"
+                          class="pick pick-loc"
+                          type="button"
+                          (click)="openObjectLocPicker(0, si)"
+                        >
+                          <span class="loc-pill">{{ pictureLocationSequences()[0][si] }}</span>
+                          <span class="pick-label">Cell</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </ng-container>
@@ -714,15 +736,26 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
                     </button>
                   </div>
                   <div class="cell step-col" *ngFor="let __ of [].constructor(stepsNum()); let si = index">
-                    <button class="pick pick-visual" type="button" (click)="openPicPicker(ti, si)">
-                      <img
-                        class="pick-thumb"
-                        [src]="picSrc(pictureSequences()[ti][si])"
-                        alt=""
-                        loading="lazy"
-                      />
-                      <span class="pick-label">{{ pad3(pictureSequences()[ti][si]) }}</span>
-                    </button>
+                    <div class="step-pair">
+                      <button class="pick pick-visual" type="button" (click)="openPicPicker(ti, si)">
+                        <img
+                          class="pick-thumb"
+                          [src]="picSrc(pictureSequences()[ti][si])"
+                          alt=""
+                          loading="lazy"
+                        />
+                        <span class="pick-label">{{ pad3(pictureSequences()[ti][si]) }}</span>
+                      </button>
+                      <button
+                        *ngIf="objectManualLocations()"
+                        class="pick pick-loc"
+                        type="button"
+                        (click)="openObjectLocPicker(ti, si)"
+                      >
+                        <span class="loc-pill">{{ pictureLocationSequences()[ti][si] }}</span>
+                        <span class="pick-label">Cell</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               </ng-template>
@@ -806,8 +839,9 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
                 <h2>Fixed display layout (optional)</h2>
                 <p class="muted small">
                   Limit the 4×4 to chosen cells and assign a picture to each (e.g. only two neighboring cells, like a
-                  1×2). Sequence steps below must use those cells. When off, Spatial keeps the usual full-grid random
-                  identical filler.
+                  1×2). Sequence steps below must use those cells. Turn off “Same sequence for all trials” to set a
+                  different cell/picture layout per trial. When off, Spatial keeps the usual full-grid random identical
+                  filler.
                 </p>
               </div>
               <div class="seq-tools">
@@ -823,14 +857,40 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
             </div>
 
             <div class="spatial-layout-editor" *ngIf="spatialFixedLayout()">
+              <div class="spatial-layout-trial-row" *ngIf="!sameSequenceForAllTrials() && trials() > 1">
+                <span class="muted small">Editing layout for:</span>
+                <button
+                  type="button"
+                  class="btn ghost spatial-layout-trial-btn"
+                  *ngFor="let _ of [].constructor(trials()); let ti = index"
+                  [class.active]="spatialLayoutEditTrial() === ti"
+                  (click)="spatialLayoutEditTrial.set(ti)"
+                >
+                  Trial {{ ti + 1 }}
+                </button>
+              </div>
               <div class="spatial-layout-actions">
                 <button type="button" class="btn ghost" (click)="seedSpatialLayoutPair()">Use 1×2 (cells 7–8)</button>
                 <button type="button" class="btn ghost" (click)="applySamePicToAllSpatialLayoutCells()">
                   Same picture on all cells
                 </button>
                 <button type="button" class="btn ghost" (click)="clearSpatialLayout()">Clear cells</button>
+                <button
+                  *ngIf="!sameSequenceForAllTrials() && spatialLayoutEditTrial() > 0"
+                  type="button"
+                  class="btn ghost"
+                  (click)="copyPreviousSpatialLayout()"
+                >
+                  Copy prev trial layout
+                </button>
               </div>
-              <p class="muted small">Tap a cell to include/exclude it. Tap the picture chip to choose the image.</p>
+              <p class="muted small">
+                Tap a cell to include/exclude it. Tap the picture chip to choose the image.
+                <span *ngIf="sameSequenceForAllTrials()">This layout applies to every trial.</span>
+                <span *ngIf="!sameSequenceForAllTrials()">
+                  Editing trial {{ spatialLayoutEditTrial() + 1 }} only.
+                </span>
+              </p>
               <div class="spatial-layout-grid">
                 <div
                   class="spatial-layout-cell"
@@ -938,7 +998,7 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
             <div class="picker" (click)="$event.stopPropagation()">
               <div class="picker-top">
                 <div class="picker-title">
-                  Pick location —
+                  {{ locPickerMode() === 'objectLoc' ? 'Pick picture location' : 'Pick location' }} —
                   {{
                     sameSequenceForAllTrials()
                       ? 'All trials'
@@ -956,9 +1016,17 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
                   class="loc-cell"
                   *ngFor="let cell of [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]"
                   type="button"
-                  [disabled]="spatialFixedLayout() && !isSpatialLayoutCell(cell)"
-                  [class.loc-disabled]="spatialFixedLayout() && !isSpatialLayoutCell(cell)"
-                  [class.loc-used]="isLocUsedElsewhereInTrial(locPickerTrial(), locPickerStep(), cell)"
+                  [disabled]="
+                    locPickerMode() === 'spatialSeq' && spatialFixedLayout() && !isSpatialLayoutCell(cell)
+                  "
+                  [class.loc-disabled]="
+                    locPickerMode() === 'spatialSeq' && spatialFixedLayout() && !isSpatialLayoutCell(cell)
+                  "
+                  [class.loc-used]="
+                    locPickerMode() === 'objectLoc'
+                      ? isObjectLocUsedElsewhereInTrial(locPickerTrial(), locPickerStep(), cell)
+                      : isLocUsedElsewhereInTrial(locPickerTrial(), locPickerStep(), cell)
+                  "
                   (click)="pickLoc(cell)"
                 >
                   {{ cell }}
@@ -1337,12 +1405,22 @@ export class AppComponent {
   /**
    * Spatial only: when on, study + test show only the chosen cells with assigned pictures
    * (e.g. a fixed 1×2 pair inside the 4×4). Distractors (N) is ignored.
+   * Layouts are per-trial (or synced when “Same sequence for all trials” is on).
    */
   readonly spatialFixedLayout = signal(false);
-  /** Active Spatial display cells (1–16), sorted. */
-  readonly spatialLayoutCells = signal<number[]>([]);
-  /** Picture id per Spatial layout cell. */
-  readonly spatialLayoutPics = signal<Record<number, number>>({});
+  /** Per-trial Spatial display cells (1–16), sorted. */
+  readonly spatialLayoutCellsByTrial = signal<number[][]>([]);
+  /** Per-trial picture id map for Spatial layout cells. */
+  readonly spatialLayoutPicsByTrial = signal<Array<Record<number, number>>>([]);
+  /** Which trial’s Spatial layout is being edited when sequences differ per trial. */
+  readonly spatialLayoutEditTrial = signal(0);
+  /**
+   * Object only: when on, each sequence picture has a manually chosen grid cell
+   * (study + test), instead of random placement.
+   */
+  readonly objectManualLocations = signal(false);
+  /** Per-trial grid cell for each Object sequence step (parallel to pictureSequences). */
+  readonly pictureLocationSequences = signal<number[][]>([]);
   readonly studySeconds = signal(1);
   readonly itiSeconds = signal(1);
   /** Correct-step feedback toggles (location + picture test). */
@@ -1503,6 +1581,7 @@ export class AppComponent {
   readonly spatialLayoutPicCell = signal(1);
   // Location picker overlay (4x4 grid selection)
   readonly locPickerOpen = signal(false);
+  readonly locPickerMode = signal<'spatialSeq' | 'objectLoc'>('spatialSeq');
   readonly locPickerTrial = signal(0);
   readonly locPickerStep = signal(0);
   readonly sameSequencePromptOpen = signal(false);
@@ -1555,6 +1634,7 @@ export class AppComponent {
         this.picPickerOpen.set(false);
         this.locPickerOpen.set(false);
         this.picPickerMode.set('sequence');
+        this.locPickerMode.set('spatialSeq');
       }
     });
 
@@ -1575,13 +1655,19 @@ export class AppComponent {
         let next = this._normalizeSequences(cur, t, steps, 1, this.maxPicId(), DEFAULT_PICTURE_ROWS);
         if (syncAll) next = this._syncAllTrialsToMaster(next);
         this.pictureSequences.set(next);
-        untracked(() => this._maybePromptSameSequenceForAllTrials(false));
+        untracked(() => {
+          this._normalizePictureLocationSequences(t, steps, syncAll);
+          this._maybePromptSameSequenceForAllTrials(false);
+        });
       } else {
         const cur = untracked(() => this.locationSequences());
         let next = this._normalizeSequences(cur, t, steps, 1, 16, DEFAULT_LOCATION_ROWS);
         if (syncAll) next = this._syncAllTrialsToMaster(next);
         this.locationSequences.set(next);
-        untracked(() => this._maybePromptSameSequenceForAllTrials(false));
+        untracked(() => {
+          this._normalizeSpatialLayouts(t, syncAll);
+          this._maybePromptSameSequenceForAllTrials(false);
+        });
       }
     });
     this.setTestMode(this.testMode());
@@ -1760,9 +1846,13 @@ export class AppComponent {
     this.locationSequences.set(DEFAULT_LOCATION_ROWS.map((row) => [...row]));
     this.pictureSequences.set(DEFAULT_PICTURE_ROWS.map((row) => [...row]));
     this.spatialFixedLayout.set(false);
-    this.spatialLayoutCells.set([]);
-    this.spatialLayoutPics.set({});
+    this.spatialLayoutCellsByTrial.set([]);
+    this.spatialLayoutPicsByTrial.set([]);
+    this.spatialLayoutEditTrial.set(0);
+    this.objectManualLocations.set(false);
+    this.pictureLocationSequences.set([]);
     this.picPickerMode.set('sequence');
+    this.locPickerMode.set('spatialSeq');
     this.screen.set('setup');
   }
 
@@ -1938,6 +2028,9 @@ export class AppComponent {
         this._normalizeSequences(this.pictureSequences(), t, steps, 1, this.maxPicId(), DEFAULT_PICTURE_ROWS),
       );
       this.pictureSequences.set(next);
+      if (this.objectManualLocations()) {
+        this._normalizePictureLocationSequences(t, steps, true);
+      }
     } else {
       const t = Math.max(1, this.trials());
       const steps = Math.max(1, this.stepsNum());
@@ -1945,6 +2038,9 @@ export class AppComponent {
         this._normalizeSequences(this.locationSequences(), t, steps, 1, 16, DEFAULT_LOCATION_ROWS),
       );
       this.locationSequences.set(next);
+      if (this.spatialFixedLayout()) {
+        this._normalizeSpatialLayouts(t, true);
+      }
     }
     this._maybePromptSameSequenceForAllTrials(false);
   }
@@ -1957,10 +2053,28 @@ export class AppComponent {
     const seed = isPicture ? DEFAULT_PICTURE_ROWS : DEFAULT_LOCATION_ROWS;
     const cur = isPicture ? this.pictureSequences() : this.locationSequences();
     const normalized = this._normalizeSequences(cur, t, steps, 1, isPicture ? this.maxPicId() : 16, seed);
-    const copied = [...normalized[trialIdx - 1]];
+    const copied = [...normalized[trialIdx - 1]!];
     const next = normalized.map((row, i) => (i === trialIdx ? copied : [...row]));
-    if (isPicture) this.pictureSequences.set(next);
-    else this.locationSequences.set(next);
+    if (isPicture) {
+      this.pictureSequences.set(next);
+      if (this.objectManualLocations()) {
+        this._normalizePictureLocationSequences(t, steps, false);
+        const locs = this.pictureLocationSequences().map((row) => [...row]);
+        locs[trialIdx] = [...(locs[trialIdx - 1] ?? [])];
+        this.pictureLocationSequences.set(locs);
+      }
+    } else {
+      this.locationSequences.set(next);
+      if (this.spatialFixedLayout()) {
+        this._normalizeSpatialLayouts(t, false);
+        const cells = this.spatialLayoutCellsByTrial().map((row) => [...row]);
+        const pics = this.spatialLayoutPicsByTrial().map((row) => ({ ...row }));
+        cells[trialIdx] = [...(cells[trialIdx - 1] ?? [])];
+        pics[trialIdx] = { ...(pics[trialIdx - 1] ?? {}) };
+        this.spatialLayoutCellsByTrial.set(cells);
+        this.spatialLayoutPicsByTrial.set(pics);
+      }
+    }
     this._onTrialSequencesChanged();
   }
 
@@ -2016,17 +2130,24 @@ export class AppComponent {
     const errors: string[] = [];
     const syncAll = this.sameSequenceForAllTrials();
     const fixedLayout = isSpatial && this.spatialFixedLayout();
-    const layoutCells = new Set(this.spatialLayoutCells());
-    const layoutPics = this.spatialLayoutPics();
+    const manualObjectLoc = !isSpatial && this.objectManualLocations();
 
     if (fixedLayout) {
-      if (!layoutCells.size) {
-        errors.push('Fixed Spatial layout is on, but no cells are selected. Pick at least one display cell.');
-      }
-      for (const cell of this.spatialLayoutCells()) {
-        const pic = layoutPics[cell];
-        if (pic == null || pic < 1) {
-          errors.push(`Fixed Spatial layout: cell ${cell} needs a picture.`);
+      this._normalizeSpatialLayouts(trials, syncAll);
+      for (let i = 0; i < trials; i++) {
+        if (syncAll && i > 0) continue;
+        const trialLabel = syncAll ? 'All trials' : `Trial ${i + 1}`;
+        const layoutCells = this.spatialLayoutCellsByTrial()[i] ?? [];
+        const layoutPics = this.spatialLayoutPicsByTrial()[i] ?? {};
+        if (!layoutCells.length) {
+          errors.push(`${trialLabel}: fixed Spatial layout is on, but no cells are selected.`);
+          continue;
+        }
+        for (const cell of layoutCells) {
+          const pic = layoutPics[cell];
+          if (pic == null || pic < 1) {
+            errors.push(`${trialLabel}: fixed layout cell ${cell} needs a picture.`);
+          }
         }
       }
     }
@@ -2035,6 +2156,7 @@ export class AppComponent {
       if (syncAll && i > 0) continue;
       const row = rows[i];
       const trialLabel = syncAll ? 'All trials' : `Trial ${i + 1}`;
+      const layoutCells = new Set(this.spatialLayoutCellsByTrial()[syncAll ? 0 : i] ?? []);
       const byValue = new Map<number, number[]>();
       for (let s = 0; s < row.length; s++) {
         const value = row[s];
@@ -2043,7 +2165,7 @@ export class AppComponent {
         byValue.set(value, stepsForValue);
         if (fixedLayout && !layoutCells.has(value)) {
           errors.push(
-            `${trialLabel}, step ${s + 1}: cell ${value} is not in the fixed layout. Add it above or change the step.`,
+            `${trialLabel}, step ${s + 1}: cell ${value} is not in that trial’s fixed layout. Add it above or change the step.`,
           );
         }
       }
@@ -2054,6 +2176,23 @@ export class AppComponent {
         errors.push(
           `${trialLabel}: ${label} is used in steps ${stepList}. Each step must use a different ${isSpatial ? 'cell' : 'picture'}.`,
         );
+      }
+
+      if (manualObjectLoc) {
+        const locRow = (this.pictureLocationSequences()[i] ?? []).slice(0, steps);
+        const byCell = new Map<number, number[]>();
+        for (let s = 0; s < locRow.length; s++) {
+          const cell = locRow[s]!;
+          const stepNums = byCell.get(cell) ?? [];
+          stepNums.push(s + 1);
+          byCell.set(cell, stepNums);
+        }
+        for (const [cell, stepNums] of byCell) {
+          if (stepNums.length < 2) continue;
+          errors.push(
+            `${trialLabel}: cell ${cell} is used for pictures in steps ${stepNums.join(', ')}. Each picture needs its own cell.`,
+          );
+        }
       }
     }
     return errors;
@@ -2236,17 +2375,90 @@ export class AppComponent {
     }
   }
 
+  /** Setup editor: layout trial index currently being edited. */
+  private _spatialLayoutEditIdx() {
+    if (this.sameSequenceForAllTrials()) return 0;
+    return Math.max(0, Math.min(Math.max(0, this.trials() - 1), this.spatialLayoutEditTrial()));
+  }
+
+  /** Runtime: layout trial for the active Spatial trial. */
+  private _spatialLayoutRuntimeIdx() {
+    if (this.sameSequenceForAllTrials()) return 0;
+    const n = this.spatialLayoutCellsByTrial().length;
+    if (n <= 0) return 0;
+    return Math.max(0, Math.min(n - 1, this.trialIndex()));
+  }
+
+  private _runtimeSpatialLayoutCells() {
+    return this.spatialLayoutCellsByTrial()[this._spatialLayoutRuntimeIdx()] ?? [];
+  }
+
+  private _runtimeSpatialLayoutPics() {
+    return this.spatialLayoutPicsByTrial()[this._spatialLayoutRuntimeIdx()] ?? {};
+  }
+
   isSpatialLayoutCell(cell: number) {
-    return this.spatialLayoutCells().includes(cell);
+    const idx = this._spatialLayoutEditIdx();
+    return (this.spatialLayoutCellsByTrial()[idx] ?? []).includes(cell);
   }
 
   spatialLayoutPicFor(cell: number) {
-    return this.spatialLayoutPics()[cell] ?? 1;
+    const idx = this._spatialLayoutEditIdx();
+    return (this.spatialLayoutPicsByTrial()[idx] ?? {})[cell] ?? 1;
+  }
+
+  private _mutateEditSpatialLayout(
+    mutator: (cells: number[], pics: Record<number, number>) => { cells: number[]; pics: Record<number, number> },
+  ) {
+    const t = Math.max(1, this.trials());
+    this._normalizeSpatialLayouts(t, this.sameSequenceForAllTrials());
+    const idx = this._spatialLayoutEditIdx();
+    const cellsArr = this.spatialLayoutCellsByTrial().map((row) => [...row]);
+    const picsArr = this.spatialLayoutPicsByTrial().map((row) => ({ ...row }));
+    while (cellsArr.length < t) cellsArr.push([]);
+    while (picsArr.length < t) picsArr.push({});
+    const result = mutator(cellsArr[idx] ?? [], picsArr[idx] ?? {});
+    cellsArr[idx] = result.cells;
+    picsArr[idx] = result.pics;
+    if (this.sameSequenceForAllTrials()) {
+      for (let i = 0; i < cellsArr.length; i++) {
+        cellsArr[i] = [...result.cells];
+        picsArr[i] = { ...result.pics };
+      }
+    }
+    this.spatialLayoutCellsByTrial.set(cellsArr);
+    this.spatialLayoutPicsByTrial.set(picsArr);
+  }
+
+  private _normalizeSpatialLayouts(trialCount: number, syncAll: boolean) {
+    const t = Math.max(1, trialCount);
+    const curCells = this.spatialLayoutCellsByTrial();
+    const curPics = this.spatialLayoutPicsByTrial();
+    const cells: number[][] = [];
+    const pics: Array<Record<number, number>> = [];
+    for (let i = 0; i < t; i++) {
+      cells.push([...(curCells[i] ?? curCells[0] ?? [])]);
+      pics.push({ ...(curPics[i] ?? curPics[0] ?? {}) });
+    }
+    if (syncAll && cells.length) {
+      const masterCells = [...cells[0]!];
+      const masterPics = { ...pics[0]! };
+      for (let i = 0; i < t; i++) {
+        cells[i] = [...masterCells];
+        pics[i] = { ...masterPics };
+      }
+    }
+    this.spatialLayoutCellsByTrial.set(cells);
+    this.spatialLayoutPicsByTrial.set(pics);
+    if (this.spatialLayoutEditTrial() >= t) this.spatialLayoutEditTrial.set(0);
   }
 
   setSpatialFixedLayout(on: boolean) {
     this.spatialFixedLayout.set(!!on);
-    if (on && this.spatialLayoutCells().length === 0) {
+    if (!on) return;
+    this._normalizeSpatialLayouts(this.trials(), this.sameSequenceForAllTrials());
+    const idx = this._spatialLayoutEditIdx();
+    if ((this.spatialLayoutCellsByTrial()[idx] ?? []).length === 0) {
       this.seedSpatialLayoutPair();
     }
   }
@@ -2255,8 +2467,7 @@ export class AppComponent {
     // Default 1×2 in the middle row (cells 7–8), same picture in both — classic Spatial Level-1 style.
     const pic = this._randPic();
     const cells = [7, 8];
-    this.spatialLayoutCells.set(cells);
-    this.spatialLayoutPics.set({ 7: pic, 8: pic });
+    this._mutateEditSpatialLayout(() => ({ cells, pics: { 7: pic, 8: pic } }));
     this._alignSpatialSequencesToLayout(cells);
   }
 
@@ -2269,6 +2480,7 @@ export class AppComponent {
     if (!cells.length || steps > cells.length) return;
     const assigned = cells.slice(0, steps);
     const t = Math.max(1, this.trials());
+    const syncAll = this.sameSequenceForAllTrials();
     let next = this._normalizeSequences(
       this.locationSequences(),
       t,
@@ -2276,8 +2488,11 @@ export class AppComponent {
       1,
       16,
       DEFAULT_LOCATION_ROWS,
-    ).map(() => [...assigned]);
-    if (this.sameSequenceForAllTrials()) next = this._syncAllTrialsToMaster(next);
+    ).map((row, i) => {
+      if (syncAll || i === this._spatialLayoutEditIdx()) return [...assigned];
+      return [...row];
+    });
+    if (syncAll) next = this._syncAllTrialsToMaster(next);
     this.locationSequences.set(next);
     // Avoid the “same sequence for all trials?” prompt after an intentional layout seed.
     this.sameSequencePromptOpen.set(false);
@@ -2285,27 +2500,32 @@ export class AppComponent {
   }
 
   clearSpatialLayout() {
-    this.spatialLayoutCells.set([]);
-    this.spatialLayoutPics.set({});
+    this._mutateEditSpatialLayout(() => ({ cells: [], pics: {} }));
+  }
+
+  copyPreviousSpatialLayout() {
+    const idx = this._spatialLayoutEditIdx();
+    if (idx < 1 || this.sameSequenceForAllTrials()) return;
+    const prevCells = [...(this.spatialLayoutCellsByTrial()[idx - 1] ?? [])];
+    const prevPics = { ...(this.spatialLayoutPicsByTrial()[idx - 1] ?? {}) };
+    this._mutateEditSpatialLayout(() => ({ cells: prevCells, pics: prevPics }));
   }
 
   toggleSpatialLayoutCell(cell: number) {
     const c = Math.max(1, Math.min(16, Math.round(cell)));
-    const cur = this.spatialLayoutCells();
-    if (cur.includes(c)) {
-      this.spatialLayoutCells.set(cur.filter((x) => x !== c));
-      const pics = { ...this.spatialLayoutPics() };
-      delete pics[c];
-      this.spatialLayoutPics.set(pics);
-      return;
-    }
-    this.spatialLayoutCells.set([...cur, c].sort((a, b) => a - b));
-    const pics = { ...this.spatialLayoutPics() };
-    if (pics[c] == null) {
-      const existing = Object.values(pics)[0];
-      pics[c] = existing ?? this._randPic();
-    }
-    this.spatialLayoutPics.set(pics);
+    this._mutateEditSpatialLayout((cur, pics) => {
+      if (cur.includes(c)) {
+        const nextPics = { ...pics };
+        delete nextPics[c];
+        return { cells: cur.filter((x) => x !== c), pics: nextPics };
+      }
+      const nextPics = { ...pics };
+      if (nextPics[c] == null) {
+        const existing = Object.values(nextPics)[0];
+        nextPics[c] = existing ?? this._randPic();
+      }
+      return { cells: [...cur, c].sort((a, b) => a - b), pics: nextPics };
+    });
   }
 
   openSpatialLayoutPicPicker(cell: number, event?: Event) {
@@ -2317,21 +2537,74 @@ export class AppComponent {
   }
 
   applySamePicToAllSpatialLayoutCells() {
-    const cells = this.spatialLayoutCells();
-    if (!cells.length) return;
-    const pics = this.spatialLayoutPics();
-    const pic = pics[cells[0]!] ?? this._randPic();
-    const next: Record<number, number> = {};
-    for (const cell of cells) next[cell] = pic;
-    this.spatialLayoutPics.set(next);
+    this._mutateEditSpatialLayout((cells, pics) => {
+      if (!cells.length) return { cells, pics };
+      const pic = pics[cells[0]!] ?? this._randPic();
+      const next: Record<number, number> = {};
+      for (const cell of cells) next[cell] = pic;
+      return { cells, pics: next };
+    });
   }
 
   isSpatialLayoutPicUsedElsewhere(cell: number, pid: number) {
-    const pics = this.spatialLayoutPics();
+    const idx = this._spatialLayoutEditIdx();
+    const pics = this.spatialLayoutPicsByTrial()[idx] ?? {};
     for (const [k, v] of Object.entries(pics)) {
       if (Number(k) !== cell && Number(v) === pid) return true;
     }
     return false;
+  }
+
+  setObjectManualLocations(on: boolean) {
+    this.objectManualLocations.set(!!on);
+    if (!on) return;
+    this._normalizePictureLocationSequences(
+      this.trials(),
+      this.stepsNum(),
+      this.sameSequenceForAllTrials(),
+    );
+  }
+
+  private _normalizePictureLocationSequences(trialCount: number, steps: number, syncAll: boolean) {
+    const t = Math.max(1, trialCount);
+    const s = Math.max(1, steps);
+    const cur = this.pictureLocationSequences();
+    const next: number[][] = [];
+    for (let i = 0; i < t; i++) {
+      const row = [...(cur[i] ?? [])];
+      while (row.length < s) {
+        row.push(this._firstUnusedInRange(row, 1, 16));
+      }
+      next.push(row.slice(0, s).map((c) => Math.max(1, Math.min(16, Number(c) || 1))));
+    }
+    this.pictureLocationSequences.set(syncAll ? this._syncAllTrialsToMaster(next) : next);
+  }
+
+  openObjectLocPicker(trialIdx: number, stepIdx: number) {
+    this.locPickerMode.set('objectLoc');
+    this.locPickerTrial.set(this.sameSequenceForAllTrials() ? 0 : trialIdx);
+    this.locPickerStep.set(stepIdx);
+    this.locPickerOpen.set(true);
+  }
+
+  isObjectLocUsedElsewhereInTrial(trialIdx: number, stepIdx: number, cell: number) {
+    const row = this.pictureLocationSequences()[trialIdx] ?? [];
+    for (let i = 0; i < row.length; i++) {
+      if (i !== stepIdx && row[i] === cell) return true;
+    }
+    return false;
+  }
+
+  setObjectLocationStep(trialIdx: number, stepIdx: number, value: string) {
+    const cell = Math.max(1, Math.min(16, Number(value) || 1));
+    const t = Math.max(1, this.trials());
+    const steps = Math.max(1, this.stepsNum());
+    this._normalizePictureLocationSequences(t, steps, false);
+    let next = this.pictureLocationSequences().map((row) => [...row]);
+    if (!next[trialIdx]) return;
+    next[trialIdx][stepIdx] = cell;
+    if (this.sameSequenceForAllTrials()) next = this._syncAllTrialsToMaster(next);
+    this.pictureLocationSequences.set(next);
   }
 
   private _enterTestPhase() {
@@ -3100,7 +3373,7 @@ export class AppComponent {
   private _legacyListPicsForTrial(taskType: 'location' | 'picture', sequence: number[]) {
     if (taskType === 'location') {
       if (this.spatialFixedLayout()) {
-        const pics = this.spatialLayoutPics();
+        const pics = this._runtimeSpatialLayoutPics();
         return sequence
           .map((cell) => this._legacyPicFileName(pics[cell] ?? this.locTrialPicId()))
           .join(',');
@@ -3113,6 +3386,11 @@ export class AppComponent {
   /** Target grid cells for this trial's sequence (legacy ListLocations). */
   private _legacyListLocationsForTrial(taskType: 'location' | 'picture', sequence: number[]) {
     if (taskType !== 'location') {
+      if (this.objectManualLocations()) {
+        const t = this.sameSequenceForAllTrials() ? 0 : this.trialIndex();
+        const locRow = this.pictureLocationSequences()[t] ?? [];
+        return sequence.map((_, i) => locRow[i] ?? '').join(',');
+      }
       return 'random';
     }
     return sequence.join(',');
@@ -3412,7 +3690,7 @@ export class AppComponent {
     if (this.taskType() === this.TaskType.Location && this.spatialFixedLayout()) {
       if (this.phase() === 'study' || this.phase() === 'test') {
         if (this.phase() === 'test' && this.disappearedCells().has(cell)) return true;
-        return !this.spatialLayoutCells().includes(cell);
+        return !this._runtimeSpatialLayoutCells().includes(cell);
       }
     }
     // Default path (unchanged): dimming only applies during test.
@@ -3442,7 +3720,7 @@ export class AppComponent {
       if (this.spatialFixedLayout()) {
         return (
           (this.phase() === 'study' || this.phase() === 'test') &&
-          this.spatialLayoutCells().includes(cell)
+          this._runtimeSpatialLayoutCells().includes(cell)
         );
       }
       return (
@@ -3457,7 +3735,7 @@ export class AppComponent {
   picIdInGridCell(cell: number) {
     if (this.taskType() === this.TaskType.Location) {
       if (this.spatialFixedLayout()) {
-        return this.spatialLayoutPics()[cell] ?? this.locTrialPicId();
+        return this._runtimeSpatialLayoutPics()[cell] ?? this.locTrialPicId();
       }
       return this.locTrialPicId();
     }
@@ -3473,8 +3751,8 @@ export class AppComponent {
 
   private _buildLocTrialPic() {
     if (this.spatialFixedLayout()) {
-      const cells = this.spatialLayoutCells();
-      const pics = this.spatialLayoutPics();
+      const cells = this._runtimeSpatialLayoutCells();
+      const pics = this._runtimeSpatialLayoutPics();
       const first = cells[0];
       this.locTrialPicId.set(first != null ? pics[first] ?? this._randPic() : this._randPic());
       return;
@@ -3484,12 +3762,23 @@ export class AppComponent {
 
   private _buildPicStudyLayout() {
     const steps = this.trialSequence().length;
-    this.picStudyCellByStep.set(this._pickRandomGridCells(steps, false));
+    // Default Object path: random study cells (unchanged when manual locations are off).
+    if (!this.objectManualLocations()) {
+      this.picStudyCellByStep.set(this._pickRandomGridCells(steps, false));
+      return;
+    }
+    const t = this.sameSequenceForAllTrials() ? 0 : this.trialIndex();
+    const row = this.pictureLocationSequences()[t] ?? [];
+    const cells = row.slice(0, steps).map((c) => Math.max(1, Math.min(16, Number(c) || 1)));
+    while (cells.length < steps) {
+      cells.push(this._firstUnusedInRange(cells, 1, 16));
+    }
+    this.picStudyCellByStep.set(cells);
   }
 
   private _buildLocationTestCells() {
     if (this.spatialFixedLayout()) {
-      const layout = this.spatialLayoutCells();
+      const layout = this._runtimeSpatialLayoutCells();
       if (layout.length) return [...layout];
     }
     const seq = this.trialSequence();
@@ -3511,12 +3800,35 @@ export class AppComponent {
   }
 
   private _buildPicTestLayout() {
-    const pics = this._testPictureIds();
-    const cells = this._pickRandomGridCells(pics.length, true);
+    // Default Object path: random cell placement (unchanged when manual locations are off).
+    if (!this.objectManualLocations()) {
+      const pics = this._testPictureIds();
+      const cells = this._pickRandomGridCells(pics.length, true);
+      const map: Record<number, number> = {};
+      pics.forEach((pid, i) => {
+        map[cells[i]!] = pid;
+      });
+      this.picTestCellToPic.set(map);
+      return;
+    }
+
+    const seq = this.trialSequence();
+    const t = this.sameSequenceForAllTrials() ? 0 : this.trialIndex();
+    const locRow = this.pictureLocationSequences()[t] ?? [];
     const map: Record<number, number> = {};
-    pics.forEach((pid, i) => {
-      map[cells[i]] = pid;
-    });
+    const usedCells = new Set<number>();
+    for (let i = 0; i < seq.length; i++) {
+      const cell = Math.max(1, Math.min(16, Number(locRow[i]) || this._firstUnusedInRange([...usedCells], 1, 16)));
+      map[cell] = seq[i]!;
+      usedCells.add(cell);
+    }
+    const distractorPics = this._testPictureIds().filter((pid) => !seq.includes(pid));
+    for (const pid of distractorPics) {
+      if (usedCells.size >= 16) break;
+      const cell = this._firstUnusedInRange([...usedCells], 1, 16);
+      map[cell] = pid;
+      usedCells.add(cell);
+    }
     this.picTestCellToPic.set(map);
   }
 
@@ -3577,7 +3889,9 @@ export class AppComponent {
       for (const id of this.picIds().slice(0, 24)) ids.add(id);
       for (const id of this.customPicIds()) ids.add(id);
     } else if (this.spatialFixedLayout()) {
-      for (const pic of Object.values(this.spatialLayoutPics())) ids.add(Number(pic));
+      for (const trialPics of this.spatialLayoutPicsByTrial()) {
+        for (const pic of Object.values(trialPics ?? {})) ids.add(Number(pic));
+      }
     } else {
       // Spatial uses a random filler pic per trial — warm common ids.
       for (let i = 1; i <= 12; i++) ids.add(i);
@@ -3758,8 +4072,10 @@ export class AppComponent {
   pickPic(pid: number) {
     if (this.picPickerMode() === 'spatialLayout') {
       const cell = this.spatialLayoutPicCell();
-      const pics = { ...this.spatialLayoutPics(), [cell]: pid };
-      this.spatialLayoutPics.set(pics);
+      this._mutateEditSpatialLayout((cells, pics) => ({
+        cells,
+        pics: { ...pics, [cell]: pid },
+      }));
       this.picPickerOpen.set(false);
       this.picPickerMode.set('sequence');
       return;
@@ -3779,6 +4095,7 @@ export class AppComponent {
   }
 
   openLocPicker(trialIdx: number, stepIdx: number) {
+    this.locPickerMode.set('spatialSeq');
     this.locPickerTrial.set(this.sameSequenceForAllTrials() ? 0 : trialIdx);
     this.locPickerStep.set(stepIdx);
     this.locPickerOpen.set(true);
@@ -3786,11 +4103,18 @@ export class AppComponent {
 
   closeLocPicker() {
     this.locPickerOpen.set(false);
+    this.locPickerMode.set('spatialSeq');
   }
 
   pickLoc(cell: number) {
     const ti = this.locPickerTrial();
     const si = this.locPickerStep();
+    if (this.locPickerMode() === 'objectLoc') {
+      this.setObjectLocationStep(ti, si, String(cell));
+      this.locPickerOpen.set(false);
+      this.locPickerMode.set('spatialSeq');
+      return;
+    }
     this.setLocationStep(ti, si, String(cell));
     this.locPickerOpen.set(false);
   }

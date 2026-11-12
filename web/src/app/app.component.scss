@@ -1183,11 +1183,33 @@ input {
   margin: 4px 0 8px;
 }
 
+.spatial-layout-trial-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.spatial-layout-trial-btn.active {
+  border-color: rgba(79, 70, 229, 0.45);
+  background: rgba(99, 102, 241, 0.14);
+  color: #4338ca;
+  font-weight: 800;
+}
+
 .spatial-layout-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 10px;
+}
+
+.step-pair {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
 }
 
 .spatial-layout-grid {

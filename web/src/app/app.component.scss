@@ -1,3 +1,14 @@
+.app-shell.subject-display {
+  background: #000;
+  min-height: 100vh;
+  cursor: none;
+}
+
+.subject-hold {
+  min-height: 100vh;
+  background: #000;
+}
+
 :host {
   display: block;
   min-height: 100dvh;

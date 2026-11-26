@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, HostBinding, computed, effect, signal, untracked } from '@angular/core';
+import { Component, HostBinding, NgZone, computed, effect, signal, untracked } from '@angular/core';
 import * as XLSX from 'xlsx';
 
 type TrialTouch = {
@@ -238,17 +238,155 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
   [3, 15],
 ];
 
+type SubjectCellFrame = {
+  id: number;
+  active: boolean;
+  borderFlash: boolean;
+  dim: boolean;
+  disabled: boolean;
+  showImage: boolean;
+  picSrc: string;
+  badge: number | null;
+};
+
+type SubjectRewardFrame = {
+  kind: 'correct' | 'video' | 'surprise';
+  title: string;
+  sub: string;
+  emoji: string;
+  videoSrc: string;
+  playId: string;
+  surpriseId: string;
+  burst: string;
+};
+
+/** What the child/ape window is allowed to render. No setup, no sequences. */
+type SubjectFrame = {
+  visible: boolean;
+  title: string;
+  subtitle: string;
+  meta: string;
+  showStepProgress: boolean;
+  stepCount: number;
+  pressedCount: number;
+  feedbackStepNumber: boolean;
+  feedbackSmiley: boolean;
+  feedbackBorder: boolean;
+  feedback: 'correct' | 'wrong' | null;
+  cells: SubjectCellFrame[];
+  reward: SubjectRewardFrame | null;
+};
+
 @Component({
   selector: 'app-root',
   imports: [CommonModule],
   template: `
-    <div class="app-shell" [class.run-screen]="screen() === 'run'">
+    <div class="app-shell subject-display run-screen" *ngIf="isSubjectDisplay">
+      <section class="stage" *ngIf="subjectFrame()?.visible; else subjectHold">
+        <div class="stage-top">
+          <div class="title">{{ subjectFrame()!.title }}</div>
+          <div class="subtitle" *ngIf="subjectFrame()!.subtitle">{{ subjectFrame()!.subtitle }}</div>
+          <div class="meta" *ngIf="subjectFrame()!.meta">{{ subjectFrame()!.meta }}</div>
+          <div class="step-progress" *ngIf="subjectFrame()!.showStepProgress">
+            <div
+              class="step-badge"
+              *ngFor="let _ of [].constructor(subjectFrame()!.stepCount); let i = index"
+              [class.done]="i < subjectFrame()!.pressedCount"
+            >
+              <span class="num" *ngIf="subjectFrame()!.feedbackStepNumber">{{ i + 1 }}</span>
+              <span class="face" *ngIf="subjectFrame()!.feedbackSmiley && i < subjectFrame()!.pressedCount">😊</span>
+            </div>
+          </div>
+        </div>
+        <div class="stage-grid-wrap">
+          <div class="grid4">
+            <button
+              class="cell"
+              *ngFor="let cell of subjectFrame()!.cells"
+              type="button"
+              [class.active]="cell.active"
+              [class.border-flash]="cell.borderFlash"
+              [class.dim]="cell.dim"
+              [disabled]="cell.disabled"
+              (click)="onSubjectCell(cell.id)"
+            >
+              <div class="step-overlay" *ngIf="cell.badge">
+                <div class="step-overlay-cluster" aria-hidden="true">
+                  <span class="step-num" *ngIf="subjectFrame()!.feedbackStepNumber" [class.badge-border]="subjectFrame()!.feedbackBorder">{{
+                    cell.badge
+                  }}</span>
+                  <span class="step-face" *ngIf="subjectFrame()!.feedbackSmiley">😊</span>
+                </div>
+              </div>
+              <ng-container *ngIf="cell.showImage; else subjectEmpty">
+                <div class="cell-media">
+                  <img class="pic" [src]="cell.picSrc" alt="" draggable="false" />
+                </div>
+              </ng-container>
+              <ng-template #subjectEmpty>
+                <div class="cell-empty" aria-hidden="true"></div>
+              </ng-template>
+            </button>
+          </div>
+        </div>
+        <div class="feedback" *ngIf="subjectFrame()!.feedback">
+          <div class="pill" [class.ok]="subjectFrame()!.feedback === 'correct'" [class.no]="subjectFrame()!.feedback === 'wrong'">
+            {{ subjectFrame()!.feedback === 'correct' ? 'Correct!' : 'Try again' }}
+          </div>
+        </div>
+      </section>
+      <ng-template #subjectHold>
+        <div class="subject-hold"></div>
+      </ng-template>
+      <div class="congrats" *ngIf="subjectFrame()?.visible && subjectFrame()?.reward as reward" role="dialog" aria-label="Reward">
+        <div class="congrats-backdrop"></div>
+        <div
+          class="congrats-card"
+          [class.congrats-card--correct]="reward.kind === 'correct'"
+          [class.congrats-card--surprise]="reward.kind === 'surprise'"
+        >
+          <ng-container *ngIf="reward.kind === 'correct'">
+            <div class="congrats-hero">✅</div>
+            <h2 class="congrats-title">{{ reward.title }}</h2>
+            <p class="congrats-sub">{{ reward.sub }}</p>
+          </ng-container>
+          <ng-container *ngIf="reward.kind === 'video'">
+            <div class="congrats-hero">🎉</div>
+            <div class="congrats-video-wrap">
+              <video class="congrats-video" [src]="reward.videoSrc" autoplay muted playsinline preload="auto"></video>
+            </div>
+            <h2 class="congrats-title">{{ reward.title }}</h2>
+            <p class="congrats-sub">{{ reward.sub }}</p>
+          </ng-container>
+          <ng-container *ngIf="reward.kind === 'surprise'">
+            <div class="surprise-stage" aria-hidden="true">
+              <span class="surprise-burst b1">{{ reward.burst }}</span>
+              <div class="surprise-hero">{{ reward.emoji }}</div>
+            </div>
+            <h2 class="congrats-title">{{ reward.title }}</h2>
+            <p class="congrats-sub">{{ reward.sub }}</p>
+          </ng-container>
+        </div>
+      </div>
+    </div>
+
+    <div class="app-shell" *ngIf="!isSubjectDisplay" [class.run-screen]="screen() === 'run'">
       <header class="topbar">
         <div class="brand">
           <div class="logo">SELeCT</div>
           <div class="subtitle">Toddler Memory (Web)</div>
         </div>
         <div class="topbar-right">
+          <div class="topbar-actions" *ngIf="screen() === 'home' || screen() === 'setup'">
+            <button
+              type="button"
+              class="btn ghost topbar-btn"
+              title="Open a blank window for the second touch screen. Programming stays here."
+              (click)="openSubjectDisplay()"
+            >
+              Child display
+            </button>
+          </div>
           <div class="topbar-actions" *ngIf="screen() === 'run' || screen() === 'results'">
             <div class="chip" *ngIf="screen() === 'run'">Trial {{ trialIndex() + 1 }} / {{ trials() }}</div>
             <button
@@ -279,6 +417,11 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
         <section class="card" *ngIf="screen() === 'home'">
           <h1>Pick a game</h1>
           <p class="muted">Runs entirely in the browser (GitHub Pages). Works best in fullscreen.</p>
+          <p class="muted small">
+            <b>Child display</b> opens the ape or child touch screen. It stays blank while you program, then shows only
+            the test. Use Extend (not Duplicate) when two monitors are connected.
+          </p>
+          <p class="muted small" *ngIf="subjectDisplayNote()">{{ subjectDisplayNote() }}</p>
 
           <div class="recovery-banner" *ngIf="pendingRecovery() as recovery">
             <div class="recovery-title">Unsaved session backup found</div>
@@ -1320,7 +1463,7 @@ const DEFAULT_PICTURE_ROWS: number[][] = [
 export class AppComponent {
   @HostBinding('class.run-active')
   get hostRunActive() {
-    return this.screen() === 'run';
+    return this.isSubjectDisplay || this.screen() === 'run';
   }
 
   @HostBinding('class.desktop-app')
@@ -1331,6 +1474,17 @@ export class AppComponent {
   /** True when running inside the Electron desktop shell. */
   readonly isDesktopApp =
     typeof window !== 'undefined' && typeof window.selectDesktop?.closeApp === 'function';
+
+  /** Second touch screen: test only. Opened with ?display=subject (web popup or Electron window). */
+  readonly isSubjectDisplay =
+    typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('display') === 'subject';
+
+  readonly subjectFrame = signal<SubjectFrame | null>(null);
+  readonly subjectDisplayNote = signal('');
+  private displayChannel: BroadcastChannel | null = null;
+  private lastFrameJson = '';
+  /** True after the child/ape window connects. Grid taps then count only on that screen. */
+  private subjectLinkActive = false;
 
   readonly TaskType = {
     Location: 'location',
@@ -1619,7 +1773,10 @@ export class AppComponent {
     return okId && this.trials() >= 1 && this.stepsNum() >= 1 && this.studySeconds() >= 0;
   });
 
-  constructor() {
+  constructor(private zone: NgZone) {
+    this._installDisplayLink();
+    if (this.isSubjectDisplay) return;
+
     this._refreshPendingRecovery();
     this._installUnloadFlush();
     void this._loadCustomPics();
@@ -1676,6 +1833,289 @@ export class AppComponent {
       const t = Math.max(1, this.trials());
       untracked(() => this.totalTrialsNum.set(t));
     });
+    effect(() => {
+      this.screen();
+      this.phase();
+      this.stepIndex();
+      this.countdown();
+      this.trialSequence();
+      this.pressed();
+      this.feedback();
+      this.showCongrats();
+      this.activeRewardKind();
+      this.activeRewardVideo();
+      this.rewardPlayNonce();
+      this.activeSurprise();
+      this.automaticPlayback();
+      this.autoHighlightCell();
+      this.borderFlashCells();
+      this.disappearedCells();
+      this.trialTestCells();
+      this.picTestCellToPic();
+      this.picStudyCellByStep();
+      this.locTrialPicId();
+      this.feedbackBorder();
+      this.feedbackStepNumber();
+      this.feedbackSmiley();
+      this.testMode();
+      this.taskType();
+      this.sequenceChangedPromptOpen();
+      this.showBorderHighlight();
+      untracked(() => this._publishSubjectFrame());
+    });
+  }
+
+  openSubjectDisplay() {
+    this.subjectDisplayNote.set('');
+    if (this.isDesktopApp) {
+      window.selectDesktop?.openSubjectDisplay?.();
+      return;
+    }
+    const url = new URL(window.location.href);
+    url.searchParams.set('display', 'subject');
+    void this._openSubjectBrowserWindow(url.toString());
+  }
+
+  onSubjectCell(cell: number) {
+    if (!this.isSubjectDisplay) return;
+    if (this.isDesktopApp) {
+      window.selectDesktop?.sendSubjectTap?.(cell);
+      return;
+    }
+    this.displayChannel?.postMessage({ type: 'tap', cell });
+  }
+
+  private _installDisplayLink() {
+    if (this.isDesktopApp) {
+      if (this.isSubjectDisplay) {
+        window.selectDesktop?.onSubjectFrame?.((frame) => {
+          this.zone.run(() => this.subjectFrame.set(frame as SubjectFrame));
+        });
+        window.selectDesktop?.sendSubjectHello?.();
+        return;
+      }
+      window.selectDesktop?.onSubjectTap?.((cell) => {
+        this.zone.run(() => this.onGridCellClick(Number(cell), true));
+      });
+      window.selectDesktop?.onSubjectHello?.(() => {
+        this.zone.run(() => {
+          this.subjectLinkActive = true;
+          this._publishSubjectFrame(true);
+        });
+      });
+      window.selectDesktop?.onSubjectClosed?.(() => {
+        this.zone.run(() => {
+          this.subjectLinkActive = false;
+        });
+      });
+      return;
+    }
+
+    try {
+      this.displayChannel = new BroadcastChannel('select-toddler-display-v1');
+    } catch {
+      this.displayChannel = null;
+      return;
+    }
+    this.displayChannel.onmessage = (ev: MessageEvent) => {
+      const msg = ev.data as { type?: string; frame?: SubjectFrame; cell?: number };
+      if (this.isSubjectDisplay && msg?.type === 'frame' && msg.frame) {
+        this.zone.run(() => this.subjectFrame.set(msg.frame!));
+        return;
+      }
+      if (!this.isSubjectDisplay && msg?.type === 'tap') {
+        this.zone.run(() => this.onGridCellClick(Number(msg.cell), true));
+        return;
+      }
+      if (!this.isSubjectDisplay && msg?.type === 'hello') {
+        this.zone.run(() => {
+          this.subjectLinkActive = true;
+          this._publishSubjectFrame(true);
+        });
+        return;
+      }
+      if (!this.isSubjectDisplay && msg?.type === 'bye') {
+        this.zone.run(() => {
+          this.subjectLinkActive = false;
+        });
+      }
+    };
+    if (this.isSubjectDisplay) {
+      this.displayChannel.postMessage({ type: 'hello' });
+      window.addEventListener('pagehide', () => {
+        this.displayChannel?.postMessage({ type: 'bye' });
+      });
+    }
+  }
+
+  private async _openSubjectBrowserWindow(url: string) {
+    let features = 'popup=yes,width=1280,height=800';
+    try {
+      const anyWin = window as Window & {
+        getScreenDetails?: () => Promise<{
+          currentScreen: { availLeft: number };
+          screens: Array<{ availLeft: number; availTop: number; availWidth: number; availHeight: number }>;
+        }>;
+      };
+      if (anyWin.getScreenDetails) {
+        const details = await anyWin.getScreenDetails();
+        const other =
+          details.screens.find((s) => s.availLeft !== details.currentScreen.availLeft) ?? details.screens[0];
+        if (other) {
+          features = `popup=yes,left=${other.availLeft},top=${other.availTop},width=${other.availWidth},height=${other.availHeight}`;
+        }
+      }
+    } catch {
+      // Permission denied or unsupported: open a normal popup the researcher can move.
+    }
+    const popup = window.open(url, 'select-subject-display', features);
+    if (!popup) {
+      this.subjectDisplayNote.set('The browser blocked the window. Allow pop-ups, then press Child display again.');
+      return;
+    }
+    try {
+      popup.focus();
+    } catch {
+      // Ignore focus failures.
+    }
+  }
+
+  private _publishSubjectFrame(force = false) {
+    if (this.isSubjectDisplay) return;
+    const frame = this._buildSubjectFrame();
+    const json = JSON.stringify(frame);
+    if (!force && json === this.lastFrameJson) return;
+    this.lastFrameJson = json;
+    if (this.isDesktopApp) {
+      window.selectDesktop?.publishSubjectFrame?.(frame);
+      return;
+    }
+    this.displayChannel?.postMessage({ type: 'frame', frame });
+  }
+
+  private _buildSubjectFrame(): SubjectFrame {
+    const hidden: SubjectFrame = {
+      visible: false,
+      title: '',
+      subtitle: '',
+      meta: '',
+      showStepProgress: false,
+      stepCount: 0,
+      pressedCount: 0,
+      feedbackStepNumber: false,
+      feedbackSmiley: false,
+      feedbackBorder: false,
+      feedback: null,
+      cells: [],
+      reward: null,
+    };
+    // Setup, results, study-ready, and teacher prompts stay on the researcher screen only.
+    if (this.screen() !== 'run' || this.phase() === 'studyReady' || this.phase() === 'done') return hidden;
+    if (this.sequenceChangedPromptOpen()) return hidden;
+
+    const phase = this.phase();
+    const seqLen = this.trialSequence().length;
+    const pressedCount = this.pressed().length;
+    let title = '';
+    let subtitle = '';
+    let meta = '';
+    if (phase === 'study') {
+      title = this.taskTitle();
+      subtitle = this.taskTagline();
+      meta = `${this.isSpatialTask() ? 'Location' : 'Picture'} ${this.stepIndex() + 1} of ${seqLen} · ${this.countdown()}`;
+    } else if (this.isDemoTrial()) {
+      title = 'Watch!';
+      subtitle = this.isSpatialTask() ? 'Watch each location in order.' : 'Watch each picture in order.';
+    } else if (phase === 'test') {
+      title =
+        this.testMode() === this.TestMode.FreeRecall
+          ? this.isSpatialTask()
+            ? 'Touch each location!'
+            : 'Touch each picture!'
+          : this.isSpatialTask()
+            ? 'Touch each location in order!'
+            : 'Touch each picture in order!';
+      subtitle =
+        this.testMode() === this.TestMode.FreeRecall
+          ? `Response ${pressedCount + 1} of ${seqLen}`
+          : `Step ${pressedCount + 1} of ${seqLen}`;
+    }
+
+    const showBadges =
+      phase === 'test' && this.testMode() !== this.TestMode.FreeRecall && (this.feedbackStepNumber() || this.feedbackSmiley());
+    const highlight = this.showBorderHighlight();
+    const cells: SubjectCellFrame[] = this.gridCells.map((id) => ({
+      id,
+      active: highlight && (this.isGridCellActive(id) || this.isAutoHighlightCell(id)),
+      borderFlash: highlight && this.isCellBorderFlashing(id),
+      dim: this.isGridCellDim(id),
+      disabled: this.isGridCellDisabled(id),
+      showImage: this.showImageInGridCell(id),
+      picSrc: this.picSrc(this.picIdInGridCell(id)),
+      badge: showBadges ? this.gridStepBadge(id) : null,
+    }));
+
+    let reward: SubjectRewardFrame | null = null;
+    if (this.showCongrats()) {
+      const kind = this.activeRewardKind();
+      if (kind === 'correct') {
+        reward = {
+          kind,
+          title: 'Correct!',
+          sub: 'Nice work!',
+          emoji: '✅',
+          videoSrc: '',
+          playId: '',
+          surpriseId: '',
+          burst: '',
+        };
+      } else if (kind === 'video') {
+        const clip = this.activeRewardVideo();
+        const play = this.rewardVideoPlays()[0];
+        if (clip && play) {
+          reward = {
+            kind,
+            title: clip.title,
+            sub: clip.sub,
+            emoji: '🎉',
+            videoSrc: play.src,
+            playId: play.playId,
+            surpriseId: '',
+            burst: '',
+          };
+        }
+      } else if (kind === 'surprise') {
+        const surprise = this.activeSurprise();
+        if (surprise) {
+          reward = {
+            kind,
+            title: surprise.title,
+            sub: surprise.sub,
+            emoji: surprise.emoji,
+            videoSrc: '',
+            playId: '',
+            surpriseId: surprise.id,
+            burst: surprise.burst,
+          };
+        }
+      }
+    }
+
+    return {
+      visible: true,
+      title,
+      subtitle,
+      meta,
+      showStepProgress: showBadges,
+      stepCount: seqLen,
+      pressedCount,
+      feedbackStepNumber: this.feedbackStepNumber(),
+      feedbackSmiley: this.feedbackSmiley(),
+      feedbackBorder: this.feedbackBorder(),
+      feedback: this.feedback(),
+      cells,
+      reward,
+    };
   }
 
   setAutomaticDemo(on: boolean) {
@@ -3650,7 +4090,8 @@ export class AppComponent {
   }
 
   // UI helpers — shared 4×4 grid (location + picture run screen)
-  onGridCellClick(cell: number) {
+  onGridCellClick(cell: number, fromSubject = false) {
+    if (this.subjectLinkActive && !fromSubject) return;
     if (this.taskType() === this.TaskType.Location) {
       this.onPick(cell, cell);
       return;

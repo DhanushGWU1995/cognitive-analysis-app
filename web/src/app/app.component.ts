@@ -453,11 +453,6 @@ type SubjectFrame = {
               </div>
             </button>
           </div>
-          <div class="footer-row">
-            <a class="link" href="https://github.com/DhanushGWU1995/cognitive-analysis-app" target="_blank" rel="noopener">
-              View repo
-            </a>
-          </div>
         </section>
 
         <section class="card" *ngIf="screen() === 'setup'">

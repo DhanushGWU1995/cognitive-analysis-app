@@ -81,7 +81,7 @@ function createSubjectWindow() {
     y: target.bounds.y,
     width: target.bounds.width,
     height: target.bounds.height,
-    title: 'SELeCT Subject',
+    title: 'Test Screen',
     backgroundColor: '#000000',
     autoHideMenuBar: true,
     frame: false,

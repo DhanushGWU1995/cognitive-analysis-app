@@ -381,10 +381,10 @@ type SubjectFrame = {
             <button
               type="button"
               class="btn ghost topbar-btn"
-              title="Open a blank window for the second touch screen. Programming stays here."
+              title="Open the Test Screen on the second touch display. Study and programming stay on this screen."
               (click)="openSubjectDisplay()"
             >
-              Child display
+              Test Screen
             </button>
           </div>
           <div class="topbar-actions" *ngIf="screen() === 'run' || screen() === 'results'">
@@ -418,8 +418,9 @@ type SubjectFrame = {
           <h1>Pick a game</h1>
           <p class="muted">Runs entirely in the browser (GitHub Pages). Works best in fullscreen.</p>
           <p class="muted small">
-            <b>Child display</b> opens the ape or child touch screen. It stays blank while you program, then shows only
-            the test. Use Extend (not Duplicate) when two monitors are connected.
+            <b>Test Screen</b> opens the ape or child touch screen. It stays blank while you program and during study.
+            Study plays only on this screen. The Test Screen shows the test itself. Use Extend (not Duplicate) when two
+            monitors are connected.
           </p>
           <p class="muted small" *ngIf="subjectDisplayNote()">{{ subjectDisplayNote() }}</p>
 
@@ -1970,7 +1971,7 @@ export class AppComponent {
     }
     const popup = window.open(url, 'select-subject-display', features);
     if (!popup) {
-      this.subjectDisplayNote.set('The browser blocked the window. Allow pop-ups, then press Child display again.');
+      this.subjectDisplayNote.set('The browser blocked the window. Allow pop-ups, then press Test Screen again.');
       return;
     }
     try {
@@ -2009,8 +2010,15 @@ export class AppComponent {
       cells: [],
       reward: null,
     };
-    // Setup, results, study-ready, and teacher prompts stay on the researcher screen only.
-    if (this.screen() !== 'run' || this.phase() === 'studyReady' || this.phase() === 'done') return hidden;
+    // Setup, study, study-ready, results, and teacher prompts stay on the programmer screen only.
+    if (
+      this.screen() !== 'run' ||
+      this.phase() === 'study' ||
+      this.phase() === 'studyReady' ||
+      this.phase() === 'done'
+    ) {
+      return hidden;
+    }
     if (this.sequenceChangedPromptOpen()) return hidden;
 
     const phase = this.phase();
@@ -2019,11 +2027,7 @@ export class AppComponent {
     let title = '';
     let subtitle = '';
     let meta = '';
-    if (phase === 'study') {
-      title = this.taskTitle();
-      subtitle = this.taskTagline();
-      meta = `${this.isSpatialTask() ? 'Location' : 'Picture'} ${this.stepIndex() + 1} of ${seqLen} · ${this.countdown()}`;
-    } else if (this.isDemoTrial()) {
+    if (this.isDemoTrial()) {
       title = 'Watch!';
       subtitle = this.isSpatialTask() ? 'Watch each location in order.' : 'Watch each picture in order.';
     } else if (phase === 'test') {
